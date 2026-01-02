@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chargement...</title>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+</head>
+<body style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif;">
+
+    <div id="loader">Chargement de votre destination...</div>
+
+    <script>
+        // REMPLACE CE BLOC PAR TES INFOS FIREBASE (Etape 1.6)
+        const firebaseConfig = {
+            apiKey: "TON_API_KEY",
+            authDomain: "TON_PROJET.firebaseapp.com",
+            projectId: "TON_PROJET_ID",
+            storageBucket: "TON_PROJET.appspot.com",
+            messagingSenderId: "TON_SENDER_ID",
+            appId: "TON_APP_ID"
+        };
+        
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // Récupérer l'ID dans l'URL (ex: ?id=101)
+        const urlParams = new URLSearchParams(window.location.search);
+        const plaqueId = urlParams.get('id');
+
+        if (plaqueId) {
+            // Chercher l'URL correspondante dans Firebase
+            db.collection("plaques").doc(plaqueId).get().then((doc) => {
+                if (doc.exists && doc.data().url) {
+                    const data = doc.data();
+                    
+                    // Mise à jour des stats (Optionnel)
+                    db.collection("plaques").doc(plaqueId).update({
+                        scans: (data.scans || 0) + 1
+                    });
+
+                    // Redirection
+                    window.location.href = data.url;
+                } else {
+                    document.getElementById('loader').innerText = "Plaque non configurée.";
+                }
+            }).catch((error) => {
+                console.error("Erreur:", error);
+                document.getElementById('loader').innerText = "Erreur de connexion.";
+            });
+        } else {
+            document.getElementById('loader').innerText = "ID de plaque manquant.";
+        }
+    </script>
+</body>
+</html>
