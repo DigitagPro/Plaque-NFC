@@ -3,40 +3,63 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin NFC - Gestion</title>
+    <title>Admin Dashboard - NFC</title>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <style>
-        body { font-family: 'Segoe UI', sans-serif; padding: 20px; background: #f0f2f5; }
-        .container { max-width: 500px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h2 { text-align: center; color: #333; }
-        label { font-weight: bold; display: block; margin-top: 15px; }
-        input { width: 100%; padding: 12px; margin-top: 5px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 5px; }
-        button { width: 100%; padding: 15px; background: #007bff; color: white; border: none; border-radius: 5px; margin-top: 20px; font-size: 16px; cursor: pointer; transition: 0.3s; }
-        button:hover { background: #0056b3; }
-        #status { margin-top: 20px; text-align: center; font-weight: bold; }
-        .success { color: green; }
-        .error { color: red; }
+        body { background-color: #f8f9fa; padding: 20px; }
+        .card { box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: none; margin-bottom: 20px; }
+        .table-responsive { max-height: 600px; overflow-y: auto; }
+        .btn-sm { font-size: 0.8rem; }
     </style>
 </head>
 <body>
 
     <div class="container">
-        <h2>📱 Configuration Plaque</h2>
-        
-        <label>Numéro de la Plaque (ID)</label>
-        <input type="text" id="plaqueId" placeholder="Ex: 1001">
+        <h1 class="text-center mb-4">🎛️ Dashboard Plaques NFC</h1>
 
-        <label>Lien de Destination</label>
-        <input type="url" id="targetUrl" placeholder="https://instagram.com/...">
+        <div class="card p-4">
+            <h4>➕ Ajouter une nouvelle plaque</h4>
+            <div class="row g-2">
+                <div class="col-md-3">
+                    <input type="text" id="newId" class="form-control" placeholder="ID (ex: 1002)">
+                </div>
+                <div class="col-md-7">
+                    <input type="url" id="newUrl" class="form-control" placeholder="Lien (ex: instagram.com/...)">
+                </div>
+                <div class="col-md-2">
+                    <button onclick="createPlaque()" class="btn btn-primary w-100">Créer</button>
+                </div>
+            </div>
+            <small id="createStatus" class="mt-2 text-muted"></small>
+        </div>
 
-        <button onclick="savePlaque()">ENREGISTRER</button>
-
-        <div id="status"></div>
+        <div class="card p-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4>📋 Liste des plaques actives</h4>
+                <button onclick="loadPlaques()" class="btn btn-outline-secondary btn-sm">🔄 Actualiser</button>
+            </div>
+            
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-dark">
+                        <tr>
+                            <th scope="col">ID Plaque</th>
+                            <th scope="col">Lien de redirection</th>
+                            <th scope="col" class="text-center">Scans</th>
+                            <th scope="col" class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="plaquesTableBody">
+                        </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <script>
-        // Ta configuration spécifique
+        // --- CONFIGURATION FIREBASE ---
         const firebaseConfig = {
             apiKey: "AIzaSyBjfZ6GHzg-IkP-i_1RMcWNqvyhSlrUMbk",
             authDomain: "plaques-nfc-c6da0.firebaseapp.com",
@@ -50,36 +73,97 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        function savePlaque() {
-            const id = document.getElementById('plaqueId').value.trim();
-            const url = document.getElementById('targetUrl').value.trim();
-            const statusDiv = document.getElementById('status');
+        // Charger les plaques au démarrage
+        document.addEventListener('DOMContentLoaded', loadPlaques);
+
+        // --- FONCTION : LISTER LES PLAQUES ---
+        function loadPlaques() {
+            const tbody = document.getElementById('plaquesTableBody');
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center">Chargement...</td></tr>';
+
+            db.collection("plaques").orderBy("updatedAt", "desc").get().then((querySnapshot) => {
+                tbody.innerHTML = ''; // Vider le tableau
+                
+                querySnapshot.forEach((doc) => {
+                    const plaque = doc.data();
+                    const id = doc.id;
+                    const url = plaque.url || "";
+                    const scans = plaque.scans || 0;
+
+                    // Créer une ligne HTML pour chaque plaque
+                    const row = `
+                        <tr>
+                            <td><strong>${id}</strong></td>
+                            <td>
+                                <input type="text" class="form-control form-control-sm" value="${url}" id="url-${id}">
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-info text-dark">${scans}</span>
+                            </td>
+                            <td class="text-end">
+                                <button onclick="updatePlaque('${id}')" class="btn btn-success btn-sm">💾 Sauver</button>
+                                <button onclick="deletePlaque('${id}')" class="btn btn-danger btn-sm" title="Supprimer">🗑️</button>
+                            </td>
+                        </tr>
+                    `;
+                    tbody.innerHTML += row;
+                });
+
+                if(querySnapshot.empty) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="text-center">Aucune plaque trouvée. Créez-en une !</td></tr>';
+                }
+            });
+        }
+
+        // --- FONCTION : CRÉER UNE PLAQUE ---
+        function createPlaque() {
+            const id = document.getElementById('newId').value.trim();
+            const url = document.getElementById('newUrl').value.trim();
+            const status = document.getElementById('createStatus');
 
             if(!id || !url) {
-                statusDiv.innerText = "Veuillez remplir tous les champs.";
-                statusDiv.className = "error";
+                status.innerText = "❌ Merci de remplir l'ID et l'URL";
+                status.style.color = "red";
                 return;
             }
 
-            statusDiv.innerText = "Sauvegarde en cours...";
-            
-            // Enregistrement dans Firebase
             db.collection("plaques").doc(id).set({
                 url: url,
-                active: true,
+                scans: 0,
                 updatedAt: new Date()
-            }, { merge: true }) // 'merge' permet de ne pas effacer le compteur de scans s'il existe déjà
-            .then(() => {
-                statusDiv.innerText = "✅ Plaque " + id + " configurée avec succès !";
-                statusDiv.className = "success";
-                // Vider les champs
-                document.getElementById('plaqueId').value = "";
-                document.getElementById('targetUrl').value = "";
-            }).catch(err => {
-                console.error(err);
-                statusDiv.innerText = "Erreur : " + err.message;
-                statusDiv.className = "error";
+            }).then(() => {
+                status.innerText = "✅ Plaque créée avec succès !";
+                status.style.color = "green";
+                document.getElementById('newId').value = "";
+                document.getElementById('newUrl').value = "";
+                loadPlaques(); // Recharger le tableau
+            }).catch((error) => {
+                console.error(error);
+                status.innerText = "Erreur: " + error.message;
             });
+        }
+
+        // --- FONCTION : METTRE À JOUR UNE LIGNE ---
+        function updatePlaque(id) {
+            const newUrl = document.getElementById(`url-${id}`).value;
+            
+            db.collection("plaques").doc(id).update({
+                url: newUrl,
+                updatedAt: new Date()
+            }).then(() => {
+                alert(`Plaque ${id} mise à jour !`);
+            }).catch((error) => {
+                alert("Erreur : " + error.message);
+            });
+        }
+
+        // --- FONCTION : SUPPRIMER UNE PLAQUE ---
+        function deletePlaque(id) {
+            if(confirm("Es-tu sûr de vouloir supprimer la plaque " + id + " ? Cela cassera le lien QR Code.")) {
+                db.collection("plaques").doc(id).delete().then(() => {
+                    loadPlaques();
+                });
+            }
         }
     </script>
 </body>
