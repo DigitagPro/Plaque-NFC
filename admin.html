@@ -12,9 +12,10 @@
         body { background-color: #f0f2f5; padding: 20px; }
         .login-container { max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         #dashboard { display: none; }
-        /* Par défaut, la zone Admin est cachée */
-        #adminOnlyZone { display: none; }
+        /* Zones cachées par défaut */
+        #adminOnlyZone, .admin-col { display: none; }
         .factory-link { font-size: 0.8em; color: #666; font-family: monospace; }
+        .selected-row { background-color: #ffe5e5 !important; }
     </style>
 </head>
 <body>
@@ -38,29 +39,52 @@
         </div>
 
         <div id="adminOnlyZone" class="card p-4 bg-white border-primary mb-4">
-            <h5 class="text-primary">👑 Zone Admin : Générer Lot (CSV)</h5>
+            <h5 class="text-primary">👑 Zone Admin : Création & Export</h5>
             <div class="row g-3 align-items-end">
-                <div class="col-md-3"><input type="number" id="startId" class="form-control" placeholder="Départ (ex: 1000)"></div>
-                <div class="col-md-3"><input type="number" id="quantity" class="form-control" value="50"></div>
-                <div class="col-md-4"><button onclick="generateBatch()" class="btn btn-primary w-100">🚀 Générer & Télécharger</button></div>
+                <div class="col-md-3">
+                    <label class="form-label">Numéro de départ</label>
+                    <input type="number" id="startId" class="form-control" placeholder="Ex: 1000">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Quantité</label>
+                    <input type="number" id="quantity" class="form-control" value="50">
+                </div>
+                <div class="col-md-3">
+                    <button onclick="createPlaquesInDB()" class="btn btn-primary w-100">
+                        1. Créer dans la Base
+                    </button>
+                </div>
+                <div class="col-md-3">
+                    <button onclick="downloadCSVOnly()" class="btn btn-success w-100">
+                        2. Télécharger CSV
+                    </button>
+                </div>
             </div>
-            <div id="batchStatus" class="mt-2"></div>
+            <div id="batchStatus" class="mt-2 fw-bold"></div>
+        </div>
+
+        <div id="bulkActionsBar" class="alert alert-danger d-none align-items-center justify-content-between">
+            <span><strong><span id="selectedCount">0</span></strong> plaques sélectionnées.</span>
+            <button onclick="deleteSelected()" class="btn btn-danger btn-sm">🗑️ Tout Supprimer</button>
         </div>
 
         <div class="card p-4">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5>📋 Attribution des liens clients</h5>
+                <h5>📋 Liste des Plaques</h5>
                 <button onclick="loadPlaques()" class="btn btn-outline-secondary btn-sm">🔄 Actualiser</button>
             </div>
             <div class="table-responsive">
                 <table class="table table-hover align-middle">
                     <thead class="table-dark">
                         <tr>
+                            <th class="admin-col" style="width: 40px;">
+                                <input type="checkbox" id="selectAllBox" onchange="toggleSelectAll()">
+                            </th>
                             <th style="width: 10%">ID</th>
                             <th style="width: 30%">Lien Usine</th>
                             <th style="width: 35%">Redirection Client</th>
                             <th style="width: 5%">Vues</th>
-                            <th style="width: 20%" class="text-end">Actions</th>
+                            <th style="width: 15%" class="text-end">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="tableBody"></tbody>
@@ -81,15 +105,15 @@
             measurementId: "G-KWT3LZV7S5"
         };
         
-        // Ton domaine PRO
         const BASE_URL = "https://qr.digitagpro.fr/?id=";
         
-        // L'EMAIL DU BOSS (C'est toi)
+        // ⚠️ METS TON EMAIL ADMIN ICI
         const MY_ADMIN_EMAIL = "digitagpro30@gmail.com"; 
 
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
         const auth = firebase.auth();
+        let isAdmin = false;
 
         // --- 2. GESTION DES RÔLES ---
         auth.onAuthStateChanged((user) => {
@@ -98,9 +122,14 @@
                 document.getElementById('dashboard').style.display = 'block';
                 document.getElementById('userEmailDisplay').innerText = user.email;
 
-                // Si c'est digitagpro30, on affiche le générateur. Sinon on cache.
-                if(user.email === MY_ADMIN_EMAIL) {
+                isAdmin = (user.email === MY_ADMIN_EMAIL);
+
+                if(isAdmin) {
                     document.getElementById('adminOnlyZone').style.display = 'block';
+                    // On montre les colonnes admin
+                    const style = document.createElement('style');
+                    style.innerHTML = '.admin-col { display: table-cell !important; }';
+                    document.head.appendChild(style);
                 } else {
                     document.getElementById('adminOnlyZone').style.display = 'none';
                 }
@@ -119,23 +148,22 @@
         }
         function logout() { auth.signOut(); }
 
-        // --- 3. FONCTIONS ---
-        async function generateBatch() {
-            if (auth.currentUser.email !== MY_ADMIN_EMAIL) return alert("Action interdite !");
+        // --- 3. FONCTIONS SÉPARÉES ---
 
+        // BOUTON 1 : Créer dans la DB
+        async function createPlaquesInDB() {
+            if (!isAdmin) return;
             const start = parseInt(document.getElementById('startId').value);
             const qty = parseInt(document.getElementById('quantity').value);
             const status = document.getElementById('batchStatus');
-            if (!start || !qty) return alert("Infos manquantes");
+            
+            if (!start || !qty) return alert("Remplis le numéro de départ et la quantité !");
 
-            status.innerHTML = `<span class="text-warning">Génération...</span>`;
-            let csvContent = "data:text/csv;charset=utf-8,ID_PLAQUE,LIEN_A_IMPRIMER\n";
+            status.innerHTML = `<span class="text-warning">⏳ Création dans la base en cours...</span>`;
             const batchPromises = [];
 
             for (let i = 0; i < qty; i++) {
                 let currentId = (start + i).toString();
-                let fullUrl = BASE_URL + currentId;
-                csvContent += `${currentId},${fullUrl}\n`;
                 batchPromises.push(db.collection("plaques").doc(currentId).set({
                     url: "", scans: 0, createdAt: new Date()
                 }, { merge: true }));
@@ -143,55 +171,81 @@
 
             try {
                 await Promise.all(batchPromises);
-                const encodedUri = encodeURI(csvContent);
-                const link = document.createElement("a");
-                link.setAttribute("href", encodedUri);
-                link.setAttribute("download", `export_usine_${start}_a_${start+qty-1}.csv`);
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                status.innerHTML = `<span class="text-success">✅ Succès !</span>`;
+                status.innerHTML = `<span class="text-success">✅ ${qty} plaques créées dans la base ! Tu peux maintenant télécharger le CSV.</span>`;
                 loadPlaques();
             } catch (error) {
-                console.error(error);
                 status.innerHTML = `<span class="text-danger">Erreur : ${error.message}</span>`;
             }
         }
 
+        // BOUTON 2 : Télécharger CSV (Sans toucher à la DB)
+        function downloadCSVOnly() {
+            if (!isAdmin) return;
+            const start = parseInt(document.getElementById('startId').value);
+            const qty = parseInt(document.getElementById('quantity').value);
+            
+            if (!start || !qty) return alert("Remplis le numéro de départ et la quantité !");
+
+            let csvContent = "data:text/csv;charset=utf-8,ID_PLAQUE,LIEN_A_IMPRIMER\n";
+            for (let i = 0; i < qty; i++) {
+                let currentId = (start + i).toString();
+                let fullUrl = BASE_URL + currentId;
+                csvContent += `${currentId},${fullUrl}\n`;
+            }
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `export_usine_${start}_a_${start+qty-1}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // --- 4. TABLEAU & SÉLECTION ---
+
         function loadPlaques() {
             const tbody = document.getElementById('tableBody');
-            tbody.innerHTML = "<tr><td colspan='5' class='text-center'>Chargement...</td></tr>";
+            tbody.innerHTML = "<tr><td colspan='6' class='text-center'>Chargement...</td></tr>";
             
             db.collection("plaques").orderBy("createdAt", "desc").limit(100).get().then((snapshot) => {
                 tbody.innerHTML = "";
                 if (snapshot.empty) {
-                    tbody.innerHTML = "<tr><td colspan='5' class='text-center'>Aucune plaque.</td></tr>";
+                    tbody.innerHTML = "<tr><td colspan='6' class='text-center'>Aucune plaque.</td></tr>";
                     return;
                 }
                 snapshot.forEach(doc => {
                     const data = doc.data();
                     const id = doc.id;
                     
-                    // Bouton supprimer visible SEULEMENT si c'est toi
+                    // Case à cocher (Admin uniquement)
+                    let checkCell = "";
+                    if (isAdmin) {
+                        checkCell = `<td class="admin-col"><input type="checkbox" class="plaque-checkbox" value="${id}" onchange="updateBulkState()"></td>`;
+                    }
+
+                    // Bouton poubelle (Admin uniquement)
                     let deleteBtn = "";
-                    if (auth.currentUser.email === MY_ADMIN_EMAIL) {
-                        deleteBtn = `<button onclick="deletePlaque('${id}')" class="btn btn-danger btn-sm">🗑️</button>`;
+                    if (isAdmin) {
+                        deleteBtn = `<button onclick="deletePlaque('${id}')" class="btn btn-outline-danger btn-sm" title="Supprimer">🗑️</button>`;
                     }
 
                     const row = `
                         <tr>
+                            ${checkCell}
                             <td class="fw-bold">${id}</td>
                             <td><span class="factory-link">${BASE_URL + id}</span></td>
                             <td><input type="text" class="form-control form-control-sm" id="url-${id}" value="${data.url || ""}"></td>
                             <td class="text-center">${data.scans || 0}</td>
                             <td class="text-end">
-                                <button onclick="saveOne('${id}')" class="btn btn-success btn-sm me-2">💾</button>
+                                <button onclick="saveOne('${id}')" class="btn btn-success btn-sm me-1">💾</button>
                                 ${deleteBtn}
                             </td>
                         </tr>
                     `;
                     tbody.innerHTML += row;
                 });
+                updateBulkState(); // Reset state
             });
         }
 
@@ -203,9 +257,58 @@
         }
 
         function deletePlaque(id) {
-            if (auth.currentUser.email !== MY_ADMIN_EMAIL) return alert("Action réservée à l'admin.");
-            if(confirm("Supprimer définitivement " + id + " ?")) {
+            if (!isAdmin) return;
+            if(confirm("Supprimer " + id + " ?")) {
                 db.collection("plaques").doc(id).delete().then(() => loadPlaques());
+            }
+        }
+
+        // --- 5. LOGIQUE SÉLECTION MULTIPLE ---
+        
+        function toggleSelectAll() {
+            const master = document.getElementById('selectAllBox');
+            const boxes = document.querySelectorAll('.plaque-checkbox');
+            boxes.forEach(box => box.checked = master.checked);
+            updateBulkState();
+        }
+
+        function updateBulkState() {
+            const boxes = document.querySelectorAll('.plaque-checkbox:checked');
+            const count = boxes.length;
+            const bar = document.getElementById('bulkActionsBar');
+            
+            document.getElementById('selectedCount').innerText = count;
+            
+            if (count > 0) {
+                bar.classList.remove('d-none');
+                bar.classList.add('d-flex');
+            } else {
+                bar.classList.add('d-none');
+                bar.classList.remove('d-flex');
+            }
+        }
+
+        async function deleteSelected() {
+            if (!isAdmin) return;
+            const boxes = document.querySelectorAll('.plaque-checkbox:checked');
+            const count = boxes.length;
+
+            if (count === 0) return;
+
+            if(confirm(`⚠️ ATTENTION : Tu vas supprimer définitivement ${count} plaques.\nEs-tu sûr ?`)) {
+                const promises = [];
+                boxes.forEach(box => {
+                    promises.push(db.collection("plaques").doc(box.value).delete());
+                });
+
+                try {
+                    await Promise.all(promises);
+                    alert("Suppression terminée !");
+                    document.getElementById('selectAllBox').checked = false; // Reset master
+                    loadPlaques();
+                } catch (e) {
+                    alert("Erreur : " + e.message);
+                }
             }
         }
     </script>
