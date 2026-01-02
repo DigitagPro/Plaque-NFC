@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin NFC - Gestion</title>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; padding: 20px; background: #f0f2f5; }
+        .container { max-width: 500px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: #333; }
+        label { font-weight: bold; display: block; margin-top: 15px; }
+        input { width: 100%; padding: 12px; margin-top: 5px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 5px; }
+        button { width: 100%; padding: 15px; background: #007bff; color: white; border: none; border-radius: 5px; margin-top: 20px; font-size: 16px; cursor: pointer; transition: 0.3s; }
+        button:hover { background: #0056b3; }
+        #status { margin-top: 20px; text-align: center; font-weight: bold; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>📱 Configuration Plaque</h2>
+        
+        <label>Numéro de la Plaque (ID)</label>
+        <input type="text" id="plaqueId" placeholder="Ex: 1001">
+
+        <label>Lien de Destination</label>
+        <input type="url" id="targetUrl" placeholder="https://instagram.com/...">
+
+        <button onclick="savePlaque()">ENREGISTRER</button>
+
+        <div id="status"></div>
+    </div>
+
+    <script>
+        // Ta configuration spécifique
+        const firebaseConfig = {
+            apiKey: "AIzaSyBjfZ6GHzg-IkP-i_1RMcWNqvyhSlrUMbk",
+            authDomain: "plaques-nfc-c6da0.firebaseapp.com",
+            projectId: "plaques-nfc-c6da0",
+            storageBucket: "plaques-nfc-c6da0.firebasestorage.app",
+            messagingSenderId: "790493007980",
+            appId: "1:790493007980:web:de515aa27e78e6a9a58849",
+            measurementId: "G-KWT3LZV7S5"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        function savePlaque() {
+            const id = document.getElementById('plaqueId').value.trim();
+            const url = document.getElementById('targetUrl').value.trim();
+            const statusDiv = document.getElementById('status');
+
+            if(!id || !url) {
+                statusDiv.innerText = "Veuillez remplir tous les champs.";
+                statusDiv.className = "error";
+                return;
+            }
+
+            statusDiv.innerText = "Sauvegarde en cours...";
+            
+            // Enregistrement dans Firebase
+            db.collection("plaques").doc(id).set({
+                url: url,
+                active: true,
+                updatedAt: new Date()
+            }, { merge: true }) // 'merge' permet de ne pas effacer le compteur de scans s'il existe déjà
+            .then(() => {
+                statusDiv.innerText = "✅ Plaque " + id + " configurée avec succès !";
+                statusDiv.className = "success";
+                // Vider les champs
+                document.getElementById('plaqueId').value = "";
+                document.getElementById('targetUrl').value = "";
+            }).catch(err => {
+                console.error(err);
+                statusDiv.innerText = "Erreur : " + err.message;
+                statusDiv.className = "error";
+            });
+        }
+    </script>
+</body>
+</html>
