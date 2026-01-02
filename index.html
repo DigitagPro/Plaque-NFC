@@ -3,54 +3,75 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chargement...</title>
+    <title>Redirection...</title>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f4f4f4; text-align: center; padding: 20px;}
+        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 20px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #debug { margin-top: 20px; color: red; font-size: 12px; }
+    </style>
 </head>
-<body style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif;">
+<body>
 
-    <div id="loader">Chargement de votre destination...</div>
+    <div id="loader">
+        <div class="spinner"></div>
+        <h3>Connexion...</h3>
+    </div>
+    <div id="debug"></div>
 
     <script>
-        // REMPLACE CE BLOC PAR TES INFOS FIREBASE (Etape 1.6)
+        // TA CONFIGURATION (Vérifie qu'elle est identique à Admin)
         const firebaseConfig = {
-            apiKey: "TON_API_KEY",
-            authDomain: "TON_PROJET.firebaseapp.com",
-            projectId: "TON_PROJET_ID",
-            storageBucket: "TON_PROJET.appspot.com",
-            messagingSenderId: "TON_SENDER_ID",
-            appId: "TON_APP_ID"
+            apiKey: "AIzaSyBjfZ6GHzg-IkP-i_1RMcWNqvyhSlrUMbk",
+            authDomain: "plaques-nfc-c6da0.firebaseapp.com",
+            projectId: "plaques-nfc-c6da0",
+            storageBucket: "plaques-nfc-c6da0.firebasestorage.app",
+            messagingSenderId: "790493007980",
+            appId: "1:790493007980:web:de515aa27e78e6a9a58849",
+            measurementId: "G-KWT3LZV7S5"
         };
-        
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
 
-        // Récupérer l'ID dans l'URL (ex: ?id=101)
-        const urlParams = new URLSearchParams(window.location.search);
-        const plaqueId = urlParams.get('id');
+        try {
+            firebase.initializeApp(firebaseConfig);
+            const db = firebase.firestore();
 
-        if (plaqueId) {
-            // Chercher l'URL correspondante dans Firebase
-            db.collection("plaques").doc(plaqueId).get().then((doc) => {
-                if (doc.exists && doc.data().url) {
-                    const data = doc.data();
-                    
-                    // Mise à jour des stats (Optionnel)
-                    db.collection("plaques").doc(plaqueId).update({
-                        scans: (data.scans || 0) + 1
-                    });
+            const urlParams = new URLSearchParams(window.location.search);
+            const plaqueId = urlParams.get('id');
 
-                    // Redirection
-                    window.location.href = data.url;
-                } else {
-                    document.getElementById('loader').innerText = "Plaque non configurée.";
-                }
-            }).catch((error) => {
-                console.error("Erreur:", error);
-                document.getElementById('loader').innerText = "Erreur de connexion.";
-            });
-        } else {
-            document.getElementById('loader').innerText = "ID de plaque manquant.";
+            if (plaqueId) {
+                // On essaie de lire la base de données
+                db.collection("plaques").doc(plaqueId).get().then((doc) => {
+                    if (doc.exists) {
+                        const data = doc.data();
+                        
+                        if (data.url && data.url.startsWith('http')) {
+                            // COMPTEUR DE VUES
+                            db.collection("plaques").doc(plaqueId).update({
+                                scans: firebase.firestore.FieldValue.increment(1)
+                            });
+                            // REDIRECTION
+                            window.location.replace(data.url);
+                        } else {
+                            document.getElementById('loader').innerHTML = `
+                                <h3>Plaque non configurée</h3>
+                                <p>ID: ${plaqueId}</p>
+                                <p>En attente de lien...</p>`;
+                        }
+                    } else {
+                        document.getElementById('loader').innerHTML = `<h3>Plaque introuvable (ID: ${plaqueId})</h3>`;
+                    }
+                }).catch((error) => {
+                    console.error(error);
+                    document.getElementById('loader').innerHTML = "<h3>Erreur de connexion</h3>";
+                    document.getElementById('debug').innerText = "Erreur Firebase: " + error.message + " (Vérifie les Règles Firestore)";
+                });
+            } else {
+                document.getElementById('loader').innerText = "QR Code malformé (Pas d'ID).";
+            }
+        } catch (e) {
+            document.getElementById('debug').innerText = "Erreur Script: " + e.message;
         }
     </script>
 </body>
