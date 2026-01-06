@@ -241,27 +241,37 @@
             });
         }
 
-        // --- RECHERCHE STRICTE SUR N° STOCK UNIQUEMENT ---
-        function filterTable() {
-            const filter = document.getElementById("searchBox").value.toUpperCase();
-            if(!filter) { loadPlaques(); return; }
+// --- RECHERCHE EXACTE (Le chiffre précis) ---
+function filterTable() {
+    // 1. On récupère le chiffre tapé
+    const searchInput = document.getElementById("searchBox").value.trim(); // .trim() enlève les espaces accidentels
 
-            const rows = document.getElementById("tableBody").getElementsByTagName("tr");
-            for (let i = 0; i < rows.length; i++) {
-                // On cherche SEULEMENT la classe 'badge-stock'
-                const stockCell = rows[i].querySelector(".badge-stock");
-                
-                if (stockCell) {
-                    const textStock = stockCell.textContent;
-                    // On vérifie si ça contient le chiffre
-                    if (textStock.indexOf(filter) > -1) {
-                        rows[i].style.display = "";
-                    } else {
-                        rows[i].style.display = "none";
-                    }
-                }
+    // 2. Si la case est vide, on réaffiche tout
+    if (searchInput === "") {
+        const rows = document.getElementById("tableBody").getElementsByTagName("tr");
+        for (let i = 0; i < rows.length; i++) { rows[i].style.display = ""; }
+        return;
+    }
+
+    const rows = document.getElementById("tableBody").getElementsByTagName("tr");
+    
+    for (let i = 0; i < rows.length; i++) {
+        const stockCell = rows[i].querySelector(".badge-stock");
+        
+        if (stockCell) {
+            // Le tableau affiche "#3", on enlève le "#" pour avoir juste "3"
+            const stockNumber = stockCell.textContent.replace('#', '').trim();
+            
+            // COMPARAISON EXACTE (===)
+            // Si le numéro est EXACTEMENT égal à ce que tu as tapé
+            if (stockNumber === searchInput) {
+                rows[i].style.display = "";
+            } else {
+                rows[i].style.display = "none";
             }
         }
+    }
+}
 
         function saveOne(id, secret) {
             const newUrl = document.getElementById(`url-${id}`).value;
