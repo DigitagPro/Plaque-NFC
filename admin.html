@@ -307,8 +307,6 @@ function saveOne(id, secret) {
         })
         .catch(e => alert("Erreur de sauvegarde : " + e.message));
 }
-        }
-
         function deletePlaque(id) { if (!isAdmin) return; if(confirm("Supprimer ?")) db.collection("plaques").doc(id).delete().then(() => loadPlaques()); }
         function toggleSelectAll() { const m = document.getElementById('selectAllBox'); document.querySelectorAll('.plaque-checkbox').forEach(b => b.checked = m.checked); updateBulkState(); }
         function updateBulkState() { const c = document.querySelectorAll('.plaque-checkbox:checked').length; const b = document.getElementById('bulkActionsBar'); document.getElementById('selectedCount').innerText = c; c>0?(b.classList.remove('d-none'),b.classList.add('d-flex')):(b.classList.add('d-none'),b.classList.remove('d-flex')); }
