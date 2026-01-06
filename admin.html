@@ -192,7 +192,7 @@
             const tbody = document.getElementById('tableBody');
             tbody.innerHTML = "<tr><td colspan='6' class='text-center'>Chargement...</td></tr>";
             
-            db.collection("plaques").limit(200).get().then((snapshot) => {
+            db.collection("plaques").limit(1000).get().then((snapshot) => {
                 tbody.innerHTML = "";
                 if (snapshot.empty) return tbody.innerHTML = "<tr><td colspan='6' class='text-center'>Vide.</td></tr>";
 
