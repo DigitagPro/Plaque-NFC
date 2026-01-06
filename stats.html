@@ -3,88 +3,125 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rapport de Performance - NFC</title>
+    <title>Rapport Performance NFC</title>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     
     <style>
-        body { background-color: #f4f6f9; color: #333; font-family: 'Segoe UI', sans-serif; }
-        .stat-card { background: white; border-radius: 15px; padding: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: center; }
-        .big-number { font-size: 3em; font-weight: bold; color: #0d6efd; }
-        .header-bg { background: linear-gradient(135deg, #0d6efd, #0099ff); color: white; padding: 40px 0; margin-bottom: 30px; border-radius: 0 0 20px 20px; }
+        body { background-color: #f0f2f5; font-family: 'Segoe UI', sans-serif; color: #333; }
+        .header-bg { background: linear-gradient(135deg, #0061f2, #00c6f9); color: white; padding: 40px 0 60px; border-radius: 0 0 30px 30px; margin-bottom: -40px; }
+        .stat-card { background: white; border-radius: 15px; padding: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); height: 100%; border: none; }
+        .big-number { font-size: 2.5em; font-weight: 800; color: #0061f2; }
+        .sub-stat { font-size: 0.9em; color: #666; }
+        h6 { text-transform: uppercase; font-size: 0.75em; letter-spacing: 1px; color: #888; margin-bottom: 15px; font-weight: bold; }
         
-        /* Pour l'impression PDF propre */
         @media print {
             .no-print { display: none !important; }
-            body { background-color: white; }
-            .header-bg { color: black; background: white; padding: 0; border-bottom: 2px solid #000; }
+            body { background: white; }
+            .header-bg { background: white; color: black; padding: 0; margin: 0; border-bottom: 2px solid #000; }
+            .stat-card { border: 1px solid #eee; box-shadow: none; }
+            .col-md-3, .col-md-4, .col-md-6, .col-md-8 { float: left; } /* Force layout for print */
         }
     </style>
 </head>
 <body>
 
     <div class="header-bg text-center">
-        <div class="container">
-            <h1 id="pageTitle">Rapport de Performance</h1>
-            <p class="opacity-75">Statistiques en temps réel de votre plaque NFC</p>
-        </div>
+        <h2 class="fw-bold">📊 Rapport d'Activité</h2>
+        <p class="opacity-75">Données certifiées DigitagPro</p>
     </div>
 
-    <div class="container">
-        <div class="d-flex justify-content-between align-items-center mb-4 no-print">
-            <a href="#" onclick="window.history.back()" class="btn btn-outline-secondary">← Retour</a>
-            <button onclick="window.print()" class="btn btn-primary">🖨️ Télécharger le Rapport (PDF)</button>
+    <div class="container pb-5">
+        <div class="d-flex justify-content-between mb-4 no-print px-2">
+            <button onclick="window.history.back()" class="btn btn-light shadow-sm text-primary fw-bold">← Retour</button>
+            <button onclick="window.print()" class="btn btn-light shadow-sm text-primary fw-bold">🖨️ Imprimer le Rapport</button>
         </div>
 
-        <div id="loading" class="text-center py-5">
-            <div class="spinner-border text-primary" role="status"></div>
-            <p class="mt-2">Chargement des données...</p>
-        </div>
+        <div id="loading" class="text-center py-5"><div class="spinner-border text-light"></div></div>
+        <div id="errorMsg" class="alert alert-danger d-none mt-4"></div>
 
-        <div id="statsContent" style="display: none;">
-            <div class="row g-4 mb-5">
-                <div class="col-md-4">
-                    <div class="stat-card">
-                        <h5 class="text-muted text-uppercase small">Plaque ID</h5>
-                        <div class="fs-2 fw-bold text-dark" id="displayId">---</div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="stat-card">
-                        <h5 class="text-muted text-uppercase small">Total Scans</h5>
-                        <div class="big-number" id="displayScans">0</div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="stat-card">
-                        <h5 class="text-muted text-uppercase small">Lien Actuel</h5>
-                        <div class="text-truncate mt-2" id="displayUrl" style="max-width: 100%;">---</div>
-                        <small class="text-success">● Actif</small>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card p-4 border-0 shadow-sm">
-                <h4 class="mb-4">Répartition (Démonstration)</h4>
-                <p class="text-muted small">Note : L'historique détaillé par date sera activé prochainement. Voici vos données actuelles.</p>
-                <div style="height: 300px;">
-                    <canvas id="myChart"></canvas>
-                </div>
-            </div>
+        <div id="dashboard" style="display: none;">
             
+            <div class="row g-3 mb-4">
+                <div class="col-12">
+                    <div class="stat-card d-flex align-items-center justify-content-between flex-wrap">
+                        <div>
+                            <h6>Plaque Identifiant</h6>
+                            <h3 class="m-0 text-dark" id="idDisplay">#--</h3>
+                        </div>
+                        <div class="text-end">
+                            <h6>Dernière Activité</h6>
+                            <div id="lastScanDisplay" class="fw-bold fs-5">--</div>
+                        </div>
+                        <div class="d-none d-md-block text-end">
+                            <h6>Destination</h6>
+                            <div id="urlDisplay" class="text-truncate text-primary" style="max-width: 250px;">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <div class="stat-card text-center">
+                        <h6>Total Vues</h6>
+                        <div class="big-number" id="totalScans">0</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="stat-card text-center">
+                        <h6>Moyenne Journalière</h6>
+                        <div class="big-number text-success" id="avgScans">0</div>
+                        <div class="small text-muted">scans / jour</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="stat-card text-center">
+                        <h6>Appareil Dominant</h6>
+                        <div class="big-number text-warning" id="topDevice">--</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-3 mb-4">
+                <div class="col-md-8">
+                    <div class="stat-card">
+                        <h6>📅 Jours d'affluence (Semaine Type)</h6>
+                        <div style="height: 250px;"><canvas id="daysChart"></canvas></div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="stat-card">
+                        <h6>⌚ Heures de Pointe</h6>
+                        <div style="height: 250px;"><canvas id="timeChart"></canvas></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-3 mb-4">
+                <div class="col-md-6">
+                    <div class="stat-card">
+                        <h6>🌍 Langues des visiteurs</h6>
+                        <div style="height: 200px;"><canvas id="langChart"></canvas></div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="stat-card">
+                        <h6>💻 Navigateurs Web</h6>
+                        <div style="height: 200px;"><canvas id="browserChart"></canvas></div>
+                    </div>
+                </div>
+            </div>
+
             <div class="text-center mt-5 text-muted small">
-                <p>Rapport généré par DigitagPro - Solutions NFC</p>
-                <p id="dateGeneration"></p>
+                Rapport généré le <span id="genDate"></span> • Solution DigitagPro
             </div>
         </div>
-        
-        <div id="errorMsg" class="alert alert-danger text-center mt-5" style="display: none;"></div>
     </div>
 
     <script>
-        // 1. CONFIGURATION FIREBASE (La même que d'habitude)
         const firebaseConfig = {
             apiKey: "AIzaSyBjfZ6GHzg-IkP-i_1RMcWNqvyhSlrUMbk",
             authDomain: "plaques-nfc-c6da0.firebaseapp.com",
@@ -97,75 +134,131 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        // 2. RÉCUPÉRATION ID
-        const urlParams = new URLSearchParams(window.location.search);
-        const plaqueId = urlParams.get('id');
+        const id = new URLSearchParams(window.location.search).get('id');
 
-        // 3. AFFICHAGE DES DONNÉES
-        if (!plaqueId) {
-            showError("Aucun ID de plaque spécifié.");
+        if(id) {
+            loadData(id);
         } else {
-            loadStats();
+            document.getElementById('errorMsg').innerText = "Erreur : ID manquant.";
+            document.getElementById('errorMsg').classList.remove('d-none');
+            document.getElementById('loading').style.display = 'none';
         }
 
-        function loadStats() {
-            db.collection("plaques").doc(plaqueId).get().then((doc) => {
-                if (doc.exists) {
-                    const data = doc.data();
-                    
-                    // Remplir les textes
-                    document.getElementById('displayId').innerText = "#" + doc.id;
-                    document.getElementById('displayScans').innerText = data.scans || 0;
-                    document.getElementById('displayUrl').innerText = data.url || "Non configuré";
-                    document.getElementById('displayUrl').setAttribute('title', data.url);
-                    document.getElementById('dateGeneration').innerText = "Généré le " + new Date().toLocaleDateString("fr-FR");
-
-                    // Afficher le contenu
-                    document.getElementById('loading').style.display = 'none';
-                    document.getElementById('statsContent').style.display = 'block';
-
-                    // Créer le graphique (Visuel sympa)
-                    createChart(data.scans || 0);
-
+        function loadData(id) {
+            db.collection("plaques").doc(id).get().then(doc => {
+                if(doc.exists) {
+                    renderDashboard(id, doc.data());
                 } else {
-                    showError("Cette plaque n'existe pas.");
+                    document.getElementById('errorMsg').innerText = "Plaque introuvable.";
+                    document.getElementById('errorMsg').classList.remove('d-none');
+                    document.getElementById('loading').style.display = 'none';
                 }
-            }).catch((error) => {
-                showError("Erreur de connexion : " + error.message);
             });
         }
 
-        function showError(msg) {
+        function renderDashboard(id, data) {
             document.getElementById('loading').style.display = 'none';
-            const errDiv = document.getElementById('errorMsg');
-            errDiv.style.display = 'block';
-            errDiv.innerText = msg;
-        }
+            document.getElementById('dashboard').style.display = 'block';
+            document.getElementById('genDate').innerText = new Date().toLocaleDateString();
 
-        // 4. GRAPHIQUE (Chart.js)
-        function createChart(totalScans) {
-            const ctx = document.getElementById('myChart').getContext('2d');
-            // Comme on n'a pas encore l'historique par date, on fait un graphique simple
-            // Pour montrer que le système marche.
-            new Chart(ctx, {
+            // 1. TEXTES
+            document.getElementById('idDisplay').innerText = "#" + id;
+            document.getElementById('urlDisplay').innerText = data.url || "Non défini";
+            const total = data.scans || 0;
+            document.getElementById('totalScans').innerText = total;
+
+            // Date dernier scan
+            if(data.lastScan) {
+                const date = data.lastScan.toDate ? data.lastScan.toDate() : new Date(data.lastScan);
+                document.getElementById('lastScanDisplay').innerText = date.toLocaleDateString() + " " + date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+            }
+
+            // Calcul Moyenne / Jour (si date de création existe)
+            if(data.createdAt) {
+                const created = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
+                const now = new Date();
+                const diffTime = Math.abs(now - created);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+                document.getElementById('avgScans').innerText = (total / diffDays).toFixed(1);
+            } else {
+                document.getElementById('avgScans').innerText = "?";
+            }
+
+            // Appareil Dominant
+            const ios = data.stats_device_ios || 0;
+            const android = data.stats_device_android || 0;
+            document.getElementById('topDevice').innerText = (ios > android) ? "iPhone" : (android > ios ? "Android" : "Égalité");
+
+            // 2. GRAPHIQUES
+
+            // A. Jours de la semaine
+            const daysData = [
+                data.stats_day_1 || 0, // Lun
+                data.stats_day_2 || 0,
+                data.stats_day_3 || 0,
+                data.stats_day_4 || 0,
+                data.stats_day_5 || 0,
+                data.stats_day_6 || 0,
+                data.stats_day_0 || 0  // Dim
+            ];
+            new Chart(document.getElementById('daysChart'), {
                 type: 'bar',
                 data: {
-                    labels: ['Total des Vues'],
-                    datasets: [{
-                        label: 'Nombre de scans',
-                        data: [totalScans],
-                        backgroundColor: ['#0d6efd'],
-                        borderRadius: 10,
-                        barThickness: 50
-                    }]
+                    labels: ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'],
+                    datasets: [{ label: 'Visites', data: daysData, backgroundColor: '#0061f2', borderRadius: 5 }]
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: { beginAtZero: true }
-                    }
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: {display:false} } }
+            });
+
+            // B. Heures (Camembert)
+            const timeData = [
+                data.stats_time_matin || 0,
+                data.stats_time_midi || 0,
+                data.stats_time_apresmidi || 0,
+                data.stats_time_soir || 0
+            ];
+            new Chart(document.getElementById('timeChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Matin (6-11h)', 'Midi (11-14h)', 'Aprèm (14-19h)', 'Soir/Nuit'],
+                    datasets: [{ data: timeData, backgroundColor: ['#ffc107', '#fd7e14', '#0d6efd', '#6c757d'] }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: {position:'bottom'} } }
+            });
+
+            // C. Langues
+            // On récupère toutes les clés qui commencent par "stats_lang_"
+            const langLabels = [];
+            const langValues = [];
+            Object.keys(data).forEach(key => {
+                if(key.startsWith('stats_lang_')) {
+                    langLabels.push(key.replace('stats_lang_', '').toUpperCase());
+                    langValues.push(data[key]);
                 }
+            });
+            new Chart(document.getElementById('langChart'), {
+                type: 'pie',
+                data: {
+                    labels: langLabels.length ? langLabels : ['Inconnu'],
+                    datasets: [{ data: langValues.length ? langValues : [1], backgroundColor: ['#00c6f9', '#0061f2', '#6610f2', '#6f42c1'] }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+
+            // D. Navigateurs
+            const browserData = [
+                data.stats_browser_chrome || 0,
+                data.stats_browser_safari || 0,
+                data.stats_browser_firefox || 0,
+                (data.stats_browser_autre || 0)
+            ];
+            new Chart(document.getElementById('browserChart'), {
+                type: 'bar',
+                data: {
+                    labels: ['Chrome', 'Safari', 'Firefox', 'Autre'],
+                    datasets: [{ label: 'Nav', data: browserData, backgroundColor: '#20c997', borderRadius: 5 }]
+                },
+                options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: {display:false} } }
             });
         }
     </script>
