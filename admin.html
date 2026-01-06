@@ -280,25 +280,35 @@
                 loadPlaques();
             }
             function filterTable() {
+    // 1. Récupérer le texte tapé
     const input = document.getElementById("searchBox");
     const filter = input.value.toUpperCase();
+    
+    // 2. Récupérer toutes les lignes
     const table = document.getElementById("tableBody");
     const tr = table.getElementsByTagName("tr");
 
+    // 3. Boucler sur chaque ligne
     for (let i = 0; i < tr.length; i++) {
-        // On cherche dans la colonne ID (index 1) et Lien (index 2)
-        // (Index 0 c'est la checkbox cachée)
-        const tdId = tr[i].getElementsByTagName("td")[1];
-        const tdUrl = tr[i].getElementsByTagName("input")[0]; // Le champ input du lien
+        // AU LIEU DE COMPTER LES COLONNES, ON CHERCHE PAR CLASSE/TYPE :
+        
+        // A. On cherche la case qui contient l'ID (elle a la classe "fw-bold")
+        const idCell = tr[i].querySelector(".fw-bold");
+        
+        // B. On cherche le champ texte du lien (input type="text")
+        // (Ça permet d'ignorer la case à cocher checkbox)
+        const urlInput = tr[i].querySelector("input[type='text']");
 
-        if (tdId || tdUrl) {
-            const txtValueId = tdId.textContent || tdId.innerText;
-            const txtValueUrl = tdUrl.value;
+        if (idCell) {
+            const txtId = idCell.textContent || idCell.innerText;
+            // Si urlInput existe on prend sa valeur, sinon vide
+            const txtUrl = urlInput ? urlInput.value : ""; 
 
-            if (txtValueId.toUpperCase().indexOf(filter) > -1 || txtValueUrl.toUpperCase().indexOf(filter) > -1) {
-                tr[i].style.display = "";
+            // Si l'ID ou le Lien contient la recherche
+            if (txtId.toUpperCase().indexOf(filter) > -1 || txtUrl.toUpperCase().indexOf(filter) > -1) {
+                tr[i].style.display = ""; // Afficher
             } else {
-                tr[i].style.display = "none";
+                tr[i].style.display = "none"; // Cacher
             }
         }
     }
