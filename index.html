@@ -6,23 +6,16 @@
     <title>Redirection...</title>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-    <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f4f4f4; text-align: center; padding: 20px;}
-        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 20px; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        #debug { margin-top: 20px; color: red; font-size: 12px; }
-    </style>
+    <style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;background:#f8f9fa;margin:0}.loader{border:5px solid #f3f3f3;border-top:5px solid #3498db;border-radius:50%;width:50px;height:50px;animation:spin 1s linear infinite}@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}</style>
 </head>
 <body>
-
-    <div id="loader">
-        <div class="spinner"></div>
-        <h3>Connexion...</h3>
+    <div style="text-align:center">
+        <div class="loader"></div>
+        <p>Connexion sécurisée...</p>
     </div>
-    <div id="debug"></div>
 
     <script>
-        // TA CONFIGURATION (Vérifie qu'elle est identique à Admin)
+        // 1. CONFIGURATION
         const firebaseConfig = {
             apiKey: "AIzaSyBjfZ6GHzg-IkP-i_1RMcWNqvyhSlrUMbk",
             authDomain: "plaques-nfc-c6da0.firebaseapp.com",
@@ -32,47 +25,79 @@
             appId: "1:790493007980:web:de515aa27e78e6a9a58849",
             measurementId: "G-KWT3LZV7S5"
         };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const plaqueId = new URLSearchParams(window.location.search).get('id');
 
-        try {
-            firebase.initializeApp(firebaseConfig);
-            const db = firebase.firestore();
+        async function handleRedirect() {
+            if (!plaqueId) return document.body.innerHTML = "<h3>Erreur : Aucun ID</h3>";
 
-            const urlParams = new URLSearchParams(window.location.search);
-            const plaqueId = urlParams.get('id');
+            const docRef = db.collection("plaques").doc(plaqueId);
+            
+            // --- ANALYSE DES DONNÉES (GRATUITE & ANONYME) ---
+            const ua = navigator.userAgent;
+            const now = new Date();
 
-            if (plaqueId) {
-                // On essaie de lire la base de données
-                db.collection("plaques").doc(plaqueId).get().then((doc) => {
-                    if (doc.exists) {
-                        const data = doc.data();
-                        
-                        if (data.url && data.url.startsWith('http')) {
-                            // COMPTEUR DE VUES
-                            db.collection("plaques").doc(plaqueId).update({
-                                scans: firebase.firestore.FieldValue.increment(1)
-                            });
-                            // REDIRECTION
-                            window.location.replace(data.url);
-                        } else {
-                            document.getElementById('loader').innerHTML = `
-                                <h3>Plaque non configurée</h3>
-                                <p>ID: ${plaqueId}</p>
-                                <p>En attente de lien...</p>`;
-                        }
+            // 1. Appareil (iOS/Android)
+            let device = "autre";
+            if (/android/i.test(ua)) device = "android";
+            else if (/iPad|iPhone|iPod/.test(ua)) device = "ios";
+
+            // 2. Navigateur (Chrome, Safari, etc.)
+            let browser = "autre";
+            if(ua.indexOf("Chrome") > -1) browser = "chrome";
+            else if(ua.indexOf("Safari") > -1) browser = "safari";
+            else if(ua.indexOf("Firefox") > -1) browser = "firefox";
+
+            // 3. Langue (fr, en, es...)
+            let lang = (navigator.language || navigator.userLanguage).split('-')[0] || "autre";
+
+            // 4. Temps (Mois, Jour 0-6, Heure)
+            const currentMonth = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, '0');
+            const dayOfWeek = now.getDay(); // 0 = Dimanche, 1 = Lundi...
+            const hour = now.getHours();
+            
+            // Tranche horaire
+            let timeSlot = "nuit"; // 23h-06h
+            if(hour >= 6 && hour < 11) timeSlot = "matin";
+            else if(hour >= 11 && hour < 14) timeSlot = "midi";
+            else if(hour >= 14 && hour < 19) timeSlot = "apresmidi";
+            else if(hour >= 19 && hour < 23) timeSlot = "soir";
+
+            try {
+                const doc = await docRef.get();
+                if (doc.exists) {
+                    const data = doc.data();
+
+                    // --- PRÉPARATION MISE À JOUR ---
+                    let updates = {
+                        scans: firebase.firestore.FieldValue.increment(1),
+                        lastScan: new Date()
+                    };
+
+                    // Incrémentations dynamiques
+                    updates[`stats_device_${device}`] = firebase.firestore.FieldValue.increment(1);
+                    updates[`stats_browser_${browser}`] = firebase.firestore.FieldValue.increment(1);
+                    updates[`stats_lang_${lang}`] = firebase.firestore.FieldValue.increment(1);
+                    updates[`stats_day_${dayOfWeek}`] = firebase.firestore.FieldValue.increment(1);
+                    updates[`stats_time_${timeSlot}`] = firebase.firestore.FieldValue.increment(1);
+                    updates[`history_${currentMonth}`] = firebase.firestore.FieldValue.increment(1);
+
+                    // Envoi rapide (Fire & Forget)
+                    docRef.update(updates);
+
+                    // --- REDIRECTION ---
+                    if (data.url && data.url.startsWith('http')) {
+                        window.location.href = data.url;
                     } else {
-                        document.getElementById('loader').innerHTML = `<h3>Plaque introuvable (ID: ${plaqueId})</h3>`;
+                        document.body.innerHTML = "<h3>Plaque non configurée</h3>";
                     }
-                }).catch((error) => {
-                    console.error(error);
-                    document.getElementById('loader').innerHTML = "<h3>Erreur de connexion</h3>";
-                    document.getElementById('debug').innerText = "Erreur Firebase: " + error.message + " (Vérifie les Règles Firestore)";
-                });
-            } else {
-                document.getElementById('loader').innerText = "QR Code malformé (Pas d'ID).";
-            }
-        } catch (e) {
-            document.getElementById('debug').innerText = "Erreur Script: " + e.message;
+                } else {
+                    document.body.innerHTML = "<h3>ID Inconnu</h3>";
+                }
+            } catch (error) { console.error(error); }
         }
+        handleRedirect();
     </script>
 </body>
 </html>
