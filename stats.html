@@ -14,8 +14,7 @@
         .header-bg { background: linear-gradient(135deg, #0061f2, #00c6f9); color: white; padding: 40px 0 60px; border-radius: 0 0 30px 30px; margin-bottom: -40px; }
         .stat-card { background: white; border-radius: 15px; padding: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); height: 100%; border: none; }
         .big-number { font-size: 2.5em; font-weight: 800; color: #0061f2; }
-        @media print { .no-print { display: none !important; } body { background: white; } .header-bg { background: white; color: black; padding: 0; border-bottom: 2px solid #000; } }
-        /* Style pour l'écran bloqué */
+        @media print { .no-print { display: none !important; } body { background: white; } .header-bg { background: white; color: black; padding: 0; border-bottom: 2px solid #000; } #accessDenied { display: none; } }
         #accessDenied { display: none; height: 100vh; align-items: center; justify-content: center; flex-direction: column; }
     </style>
 </head>
@@ -24,8 +23,7 @@
     <div id="accessDenied" class="text-center">
         <h1 style="font-size: 4em;">⛔</h1>
         <h2 class="text-danger">Accès Refusé</h2>
-        <p class="text-muted">Vous n'avez pas la permission de voir ces statistiques.</p>
-        <a href="https://digitagpro.fr" class="btn btn-outline-primary mt-3">Retour au site</a>
+        <p class="text-muted">Lien incorrect ou non autorisé.</p>
     </div>
 
     <div id="mainContent" style="display: none;">
@@ -41,32 +39,40 @@
             </div>
 
             <div id="loading" class="text-center py-5"><div class="spinner-border text-light"></div></div>
-            <div id="errorMsg" class="alert alert-danger d-none mt-4"></div>
 
             <div id="dashboard" style="display: none;">
                 <div class="row g-3 mb-4">
                     <div class="col-12">
                         <div class="stat-card d-flex align-items-center justify-content-between flex-wrap">
                             <div><h6>Plaque ID</h6><h3 class="m-0 text-dark" id="idDisplay">#--</h3></div>
-                            <div class="text-end"><h6>Dernière Activité</h6><div id="lastScanDisplay" class="fw-bold fs-5">--</div></div>
-                            <div class="d-none d-md-block text-end"><h6>Destination</h6><div id="urlDisplay" class="text-truncate text-primary" style="max-width: 250px;">--</div></div>
+                            <div class="text-end"><h6>Dernier Scan</h6><div id="lastScanDisplay" class="fw-bold fs-5">--</div></div>
+                            <div class="d-none d-md-block text-end"><h6>Destination</h6><div id="urlDisplay" class="text-truncate text-primary" style="max-width: 200px;">--</div></div>
                         </div>
                     </div>
                 </div>
 
                 <div class="row g-3 mb-4">
-                    <div class="col-md-4"><div class="stat-card text-center"><h6>Total Vues</h6><div class="big-number" id="totalScans">0</div></div></div>
-                    <div class="col-md-4"><div class="stat-card text-center"><h6>Moyenne / Jour</h6><div class="big-number text-success" id="avgScans">0</div></div></div>
-                    <div class="col-md-4"><div class="stat-card text-center"><h6>Top Appareil</h6><div class="big-number text-warning" id="topDevice">--</div></div></div>
+                    <div class="col-md-4">
+                        <div class="stat-card text-center">
+                            <h6>TOTAL VUES</h6>
+                            <div class="big-number" id="totalScans" style="margin-top: 40px;">0</div>
+                            <p class="text-muted small mt-3">Depuis la création</p>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-8">
+                        <div class="stat-card">
+                            <h6 class="mb-3">📱 Répartition des Appareils</h6>
+                            <div style="height: 250px; display:flex; justify-content:center;">
+                                <canvas id="deviceChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="row g-3 mb-4">
-                    <div class="col-md-8"><div class="stat-card"><h6>📅 Semaine Type</h6><div style="height: 250px;"><canvas id="daysChart"></canvas></div></div></div>
-                    <div class="col-md-4"><div class="stat-card"><h6>⌚ Heures</h6><div style="height: 250px;"><canvas id="timeChart"></canvas></div></div></div>
-                </div>
-                <div class="row g-3 mb-4">
-                    <div class="col-md-6"><div class="stat-card"><h6>🌍 Langues</h6><div style="height: 200px;"><canvas id="langChart"></canvas></div></div></div>
-                    <div class="col-md-6"><div class="stat-card"><h6>💻 Navigateurs</h6><div style="height: 200px;"><canvas id="browserChart"></canvas></div></div></div>
+                    <div class="col-md-6"><div class="stat-card"><h6>📅 Jours de la semaine</h6><div style="height: 200px;"><canvas id="daysChart"></canvas></div></div></div>
+                    <div class="col-md-6"><div class="stat-card"><h6>⌚ Heures de pointe</h6><div style="height: 200px;"><canvas id="timeChart"></canvas></div></div></div>
                 </div>
 
                 <div class="text-center mt-5 text-muted small">Rapport généré le <span id="genDate"></span> • Solution DigitagPro</div>
@@ -87,16 +93,11 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        // Récupération ID et SECRET depuis l'URL
         const params = new URLSearchParams(window.location.search);
         const id = params.get('id');
         const secretFromUrl = params.get('secret');
 
-        if(id) {
-            loadData(id, secretFromUrl);
-        } else {
-            showAccessDenied();
-        }
+        if(id) { loadData(id, secretFromUrl); } else { showAccessDenied(); }
 
         function showAccessDenied() {
             document.getElementById('accessDenied').style.display = 'flex';
@@ -104,26 +105,17 @@
         }
 
         function loadData(id, userSecret) {
-            // On affiche le contenu (vide) pour l'instant
             document.getElementById('mainContent').style.display = 'block';
-
             db.collection("plaques").doc(id).get().then(doc => {
                 if(doc.exists) {
                     const data = doc.data();
-
-                    // 🔒 SÉCURITÉ : VÉRIFICATION DU SECRET
-                    // Si la plaque a un secret en base, il DOIT correspondre à celui de l'URL.
-                    // Si la plaque n'a pas de secret (vieille plaque), on laisse passer (ou tu peux bloquer si tu préfères).
                     if (data.secret && data.secret !== userSecret) {
-                        showAccessDenied(); // Code incorrect -> Bloqué
+                        showAccessDenied();
                     } else {
-                        renderDashboard(id, data); // Tout est bon -> Affichage
+                        renderDashboard(id, data);
                     }
-
                 } else {
-                    document.getElementById('errorMsg').innerText = "Plaque introuvable.";
-                    document.getElementById('errorMsg').classList.remove('d-none');
-                    document.getElementById('loading').style.display = 'none';
+                    alert("Plaque introuvable");
                 }
             });
         }
@@ -133,44 +125,52 @@
             document.getElementById('dashboard').style.display = 'block';
             document.getElementById('genDate').innerText = new Date().toLocaleDateString();
 
-            // Remplissage des données (Identique à avant)
-            document.getElementById('idDisplay').innerText = "#" + id;
+            // Textes
+            document.getElementById('idDisplay').innerText = "#" + (data.internalId || id); // Affiche le N° Stock si dispo
             document.getElementById('urlDisplay').innerText = data.url || "Non défini";
-            const total = data.scans || 0;
-            document.getElementById('totalScans').innerText = total;
+            document.getElementById('totalScans').innerText = data.scans || 0;
 
             if(data.lastScan) {
                 const date = data.lastScan.toDate ? data.lastScan.toDate() : new Date(data.lastScan);
                 document.getElementById('lastScanDisplay').innerText = date.toLocaleDateString() + " " + date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
             }
 
-            if(data.createdAt) {
-                const created = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
-                const now = new Date();
-                const diffTime = Math.abs(now - created);
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
-                document.getElementById('avgScans').innerText = (total / diffDays).toFixed(1);
-            } else {
-                document.getElementById('avgScans').innerText = "?";
-            }
-
+            // --- 1. GRAPHIQUE APPAREILS (PIE CHART) ---
             const ios = data.stats_device_ios || 0;
             const android = data.stats_device_android || 0;
-            document.getElementById('topDevice').innerText = (ios > android) ? "iPhone" : (android > ios ? "Android" : "Égalité");
+            // On combine "ordinateur" et "autre" pour éviter les pertes de données des anciennes versions
+            const computer = (data.stats_device_computer || 0) + (data.stats_device_autre || 0);
 
-            // Graphiques
+            new Chart(document.getElementById('deviceChart'), {
+                type: 'doughnut', // Forme beignet
+                data: {
+                    labels: ['iPhone / iOS', 'Android', 'Ordinateur'],
+                    datasets: [{
+                        data: [ios, android, computer],
+                        backgroundColor: [
+                            '#0d6efd', // Bleu pour iPhone
+                            '#198754', // Vert pour Android
+                            '#6c757d'  // Gris pour Ordi
+                        ],
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+
+            // --- 2. GRAPHIQUE JOURS ---
             const daysData = [data.stats_day_1||0, data.stats_day_2||0, data.stats_day_3||0, data.stats_day_4||0, data.stats_day_5||0, data.stats_day_6||0, data.stats_day_0||0];
-            new Chart(document.getElementById('daysChart'), {type: 'bar', data: {labels: ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'], datasets: [{label: 'Visites', data: daysData, backgroundColor: '#0061f2', borderRadius: 5}]}, options: {responsive: true, maintainAspectRatio: false, plugins: {legend: {display:false}}}});
+            new Chart(document.getElementById('daysChart'), {type: 'bar', data: {labels: ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'], datasets: [{label: 'Visites', data: daysData, backgroundColor: '#0061f2', borderRadius: 4}]}, options: {responsive: true, maintainAspectRatio: false, plugins: {legend: {display:false}}}});
 
+            // --- 3. GRAPHIQUE HEURES ---
             const timeData = [data.stats_time_matin||0, data.stats_time_midi||0, data.stats_time_apresmidi||0, data.stats_time_soir||0];
-            new Chart(document.getElementById('timeChart'), {type: 'doughnut', data: {labels: ['Matin', 'Midi', 'Aprèm', 'Soir'], datasets: [{data: timeData, backgroundColor: ['#ffc107', '#fd7e14', '#0d6efd', '#6c757d']}]}, options: {responsive: true, maintainAspectRatio: false, plugins: {legend: {position:'bottom'}}}});
-
-            const langLabels = [], langValues = [];
-            Object.keys(data).forEach(key => { if(key.startsWith('stats_lang_')) { langLabels.push(key.replace('stats_lang_', '').toUpperCase()); langValues.push(data[key]); } });
-            new Chart(document.getElementById('langChart'), {type: 'pie', data: {labels: langLabels.length?langLabels:['Inconnu'], datasets: [{data: langValues.length?langValues:[1], backgroundColor: ['#00c6f9', '#0061f2', '#6610f2', '#6f42c1']}]}, options: {responsive: true, maintainAspectRatio: false}});
-
-            const browserData = [data.stats_browser_chrome||0, data.stats_browser_safari||0, data.stats_browser_firefox||0, (data.stats_browser_autre||0)];
-            new Chart(document.getElementById('browserChart'), {type: 'bar', data: {labels: ['Chrome', 'Safari', 'Firefox', 'Autre'], datasets: [{label: 'Nav', data: browserData, backgroundColor: '#20c997', borderRadius: 5}]}, options: {indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: {legend: {display:false}}}});
+            new Chart(document.getElementById('timeChart'), {type: 'pie', data: {labels: ['Matin', 'Midi', 'Aprèm', 'Soir'], datasets: [{data: timeData, backgroundColor: ['#ffc107', '#fd7e14', '#0d6efd', '#212529']}]}, options: {responsive: true, maintainAspectRatio: false, plugins: {legend: {position:'right'}}}});
         }
     </script>
 </body>
