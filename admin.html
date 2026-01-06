@@ -73,7 +73,7 @@
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h5>📋 Liste des Plaques</h5>
                 <div class="d-flex gap-2">
-                    <input type="text" id="searchBox" class="form-control form-control-sm" placeholder="N° Stock ou ID..." style="width: 200px;">
+                    <input type="text" id="searchBox" class="form-control form-control-sm" placeholder="N° Stock..." style="width: 200px;">
                     <button onclick="filterTable()" class="btn btn-primary btn-sm">🔍 Chercher</button>
                     <button onclick="loadPlaques()" class="btn btn-outline-secondary btn-sm" title="Tout réafficher">🔄</button>
                 </div>
@@ -84,7 +84,8 @@
                         <tr>
                             <th class="admin-col" style="width: 40px;"><input type="checkbox" id="selectAllBox" onchange="toggleSelectAll()"></th>
                             <th style="width: 10%">N° Stock</th>
-                            <th style="width: 35%">Lien Usine (QR)</th> <th style="width: 30%">Redirection Client</th>
+                            <th style="width: 35%">Lien Usine (QR)</th>
+                            <th style="width: 30%">Redirection Client</th>
                             <th style="width: 5%">Vues</th>
                             <th style="width: 15%" class="text-end">Actions</th>
                         </tr>
@@ -163,7 +164,6 @@
                 let publicId = generateRandomID();
                 const docRef = db.collection("plaques").doc(publicId);
                 
-                // On garde les 2 IDs en base
                 const plaqueData = {
                     internalId: internalNum, 
                     url: "", 
@@ -187,7 +187,6 @@
             }
         }
 
-        // CSV : On garde les 2 colonnes pour l'imprimeur
         function downloadHybridCSV() {
             if (!isAdmin) return;
             if (lastCreatedBatch.length === 0) return alert("Génère d'abord des plaques !");
@@ -242,23 +241,24 @@
             });
         }
 
+        // --- RECHERCHE STRICTE SUR N° STOCK UNIQUEMENT ---
         function filterTable() {
             const filter = document.getElementById("searchBox").value.toUpperCase();
             if(!filter) { loadPlaques(); return; }
 
             const rows = document.getElementById("tableBody").getElementsByTagName("tr");
             for (let i = 0; i < rows.length; i++) {
+                // On cherche SEULEMENT la classe 'badge-stock'
                 const stockCell = rows[i].querySelector(".badge-stock");
-                const factoryLink = rows[i].querySelector(".factory-link"); // On cherche dans le lien complet maintenant
                 
-                let textStock = stockCell ? stockCell.textContent : "";
-                let textLink = factoryLink ? factoryLink.textContent : "";
-                
-                // Si le filtre est trouvé dans le N° Stock OU le Lien (qui contient l'ID public)
-                if (textStock.indexOf(filter) > -1 || textLink.indexOf(filter) > -1) {
-                    rows[i].style.display = "";
-                } else {
-                    rows[i].style.display = "none";
+                if (stockCell) {
+                    const textStock = stockCell.textContent;
+                    // On vérifie si ça contient le chiffre
+                    if (textStock.indexOf(filter) > -1) {
+                        rows[i].style.display = "";
+                    } else {
+                        rows[i].style.display = "none";
+                    }
                 }
             }
         }
