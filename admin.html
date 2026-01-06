@@ -259,11 +259,54 @@
             }
         }
 
-        function saveOne(id, secret) {
-            const newUrl = document.getElementById(`url-${id}`).value;
-            let updates = { url: newUrl };
-            if (!secret) updates.secret = generateSecret();
-            db.collection("plaques").doc(id).set(updates, { merge: true }).then(() => alert("OK !"));
+        // --- SAUVEGARDE INTELLIGENTE (Ajoute https:// + Visuel) ---
+function saveOne(id, secret) {
+    // 1. On récupère la case et la valeur
+    const input = document.getElementById(`url-${id}`);
+    let newUrl = input.value.trim();
+
+    // 2. CORRECTION AUTOMATIQUE
+    // Si il y a du texte, mais pas de "http" au début, on l'ajoute
+    if (newUrl && !newUrl.startsWith('http')) {
+        newUrl = 'https://' + newUrl;
+        input.value = newUrl; // On met à jour l'affichage pour que tu le voies
+    }
+
+    let updates = { url: newUrl };
+
+    // Si c'est une vieille plaque sans secret, on en génère un maintenant
+    if (!secret || secret === 'undefined' || secret === '') {
+        updates.secret = generateSecret();
+    }
+
+    // 3. Enregistrement dans Firebase
+    db.collection("plaques").doc(id).set(updates, { merge: true })
+        .then(() => {
+            // 4. Petit effet visuel sur le bouton (au lieu de l'alerte)
+            // On récupère le bouton qui a été cliqué
+            const btn = window.event.target; 
+            const originalText = btn.innerText; // On garde en mémoire l'icône (💾)
+
+            // On change le bouton en "Validé"
+            btn.innerText = "✅";
+            btn.classList.remove("btn-success");
+            btn.classList.add("btn-warning"); // Devient jaune/orange
+
+            // Après 1 seconde, on remet comme avant
+            setTimeout(() => {
+                btn.innerText = "💾"; // On remet la disquette
+                btn.classList.remove("btn-warning");
+                btn.classList.add("btn-success"); // Redevient vert
+
+                // Si on a créé un secret, on doit recharger le tableau 
+                // pour que le bouton "Stats" fonctionne immédiatement
+                if (!secret || secret === 'undefined' || secret === '') {
+                    loadPlaques();
+                }
+            }, 1000);
+        })
+        .catch(e => alert("Erreur de sauvegarde : " + e.message));
+}
         }
 
         function deletePlaque(id) { if (!isAdmin) return; if(confirm("Supprimer ?")) db.collection("plaques").doc(id).delete().then(() => loadPlaques()); }
