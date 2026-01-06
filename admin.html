@@ -279,6 +279,30 @@
                 await Promise.all(promises);
                 loadPlaques();
             }
+            function filterTable() {
+    const input = document.getElementById("searchBox");
+    const filter = input.value.toUpperCase();
+    const table = document.getElementById("tableBody");
+    const tr = table.getElementsByTagName("tr");
+
+    for (let i = 0; i < tr.length; i++) {
+        // On cherche dans la colonne ID (index 1) et Lien (index 2)
+        // (Index 0 c'est la checkbox cachée)
+        const tdId = tr[i].getElementsByTagName("td")[1];
+        const tdUrl = tr[i].getElementsByTagName("input")[0]; // Le champ input du lien
+
+        if (tdId || tdUrl) {
+            const txtValueId = tdId.textContent || tdId.innerText;
+            const txtValueUrl = tdUrl.value;
+
+            if (txtValueId.toUpperCase().indexOf(filter) > -1 || txtValueUrl.toUpperCase().indexOf(filter) > -1) {
+                tr[i].style.display = "";
+            } else {
+                tr[i].style.display = "none";
+            }
+        }
+    }
+}
         }
     </script>
 </body>
