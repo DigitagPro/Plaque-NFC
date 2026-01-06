@@ -3,11 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    
     <title>Redirection...</title>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
@@ -20,7 +18,6 @@
     </div>
 
     <script>
-        // 1. CONFIGURATION
         const firebaseConfig = {
             apiKey: "AIzaSyBjfZ6GHzg-IkP-i_1RMcWNqvyhSlrUMbk",
             authDomain: "plaques-nfc-c6da0.firebaseapp.com",
@@ -39,24 +36,21 @@
 
             const docRef = db.collection("plaques").doc(plaqueId);
             
-            // --- ANALYSE DES DONNÉES ---
-            const ua = navigator.userAgent;
+            // --- 🕵️ DÉTECTION DU TYPE D'APPAREIL ---
+            const ua = navigator.userAgent || navigator.vendor || window.opera;
+            let deviceType = "computer"; // Par défaut c'est un ordi
+
+            if (/android/i.test(ua)) {
+                deviceType = "android";
+            } else if (/iPad|iPhone|iPod/.test(ua) && !window.MSStream) {
+                deviceType = "ios";
+            }
+
+            // Autres stats (Date, Heure...)
             const now = new Date();
-
-            let device = "autre";
-            if (/android/i.test(ua)) device = "android";
-            else if (/iPad|iPhone|iPod/.test(ua)) device = "ios";
-
-            let browser = "autre";
-            if(ua.indexOf("Chrome") > -1) browser = "chrome";
-            else if(ua.indexOf("Safari") > -1) browser = "safari";
-            else if(ua.indexOf("Firefox") > -1) browser = "firefox";
-
-            let lang = (navigator.language || navigator.userLanguage).split('-')[0] || "autre";
             const currentMonth = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, '0');
             const dayOfWeek = now.getDay(); 
             const hour = now.getHours();
-            
             let timeSlot = "nuit"; 
             if(hour >= 6 && hour < 11) timeSlot = "matin";
             else if(hour >= 11 && hour < 14) timeSlot = "midi";
@@ -64,30 +58,28 @@
             else if(hour >= 19 && hour < 23) timeSlot = "soir";
 
             try {
-                // On écrit directement (Fire & Forget) pour aller plus vite
-                // On n'attend pas de lire le doc avant, on fait confiance à l'ID
+                // PRÉPARATION DES MISES À JOUR
                 let updates = {
                     scans: firebase.firestore.FieldValue.increment(1),
                     lastScan: new Date()
                 };
 
-                updates[`stats_device_${device}`] = firebase.firestore.FieldValue.increment(1);
-                updates[`stats_browser_${browser}`] = firebase.firestore.FieldValue.increment(1);
-                updates[`stats_lang_${lang}`] = firebase.firestore.FieldValue.increment(1);
+                // On incrémente le bon compteur d'appareil
+                updates[`stats_device_${deviceType}`] = firebase.firestore.FieldValue.increment(1);
+                
+                // On met à jour les autres stats
                 updates[`stats_day_${dayOfWeek}`] = firebase.firestore.FieldValue.increment(1);
                 updates[`stats_time_${timeSlot}`] = firebase.firestore.FieldValue.increment(1);
                 updates[`history_${currentMonth}`] = firebase.firestore.FieldValue.increment(1);
 
-                // Envoi de la mise à jour
+                // ENVOI À LA BASE DE DONNÉES (Sans attendre la réponse pour aller vite)
                 docRef.update(updates); 
 
-                // --- REDIRECTION ---
-                // Pour éviter le cache, on récupère l'URL proprement
+                // REDIRECTION
                 const doc = await docRef.get();
                 if (doc.exists) {
                     const data = doc.data();
                     if (data.url && data.url.startsWith('http')) {
-                        // Petit délai pour assurer que Firebase a reçu l'ordre
                         window.location.href = data.url;
                     } else {
                         document.body.innerHTML = "<h3>Plaque non configurée</h3>";
@@ -99,13 +91,8 @@
             } catch (error) { console.error(error); }
         }
         
-        // Petite astuce en plus : écouter l'événement "pageshow"
-        // Si l'utilisateur fait "Précédent", on relance le script
-        window.onpageshow = function(event) {
-            if (event.persisted) {
-                window.location.reload();
-            }
-        };
+        // Anti-retour arrière
+        window.onpageshow = function(event) { if (event.persisted) window.location.reload(); };
 
         handleRedirect();
     </script>
