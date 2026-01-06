@@ -14,8 +14,8 @@
         #dashboard { display: none; }
         #adminOnlyZone, .admin-col { display: none; }
         .factory-link { font-size: 0.8em; color: #666; font-family: monospace; }
-        .id-badge { background: #343a40; color:white; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
-        .internal-badge { background: #0d6efd; color:white; padding: 4px 8px; border-radius: 50%; font-weight: bold; min-width: 30px; display:inline-block; text-align:center;}
+        .badge-stock { background-color: #6c757d; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
+        .badge-public { background-color: #0d6efd; color: white; padding: 4px 8px; border-radius: 4px; font-family: monospace; }
     </style>
 </head>
 <body>
@@ -39,25 +39,25 @@
         </div>
 
         <div id="adminOnlyZone" class="card p-4 bg-white border-primary mb-4">
-            <h5 class="text-primary">🏭 Générateur de Série</h5>
-            <p class="text-muted small">Associe un N° de série (1, 2, 3...) à un ID aléatoire sécurisé.</p>
+            <h5 class="text-primary">🏭 Usine de Plaques (Mode Pro)</h5>
+            <p class="text-muted small">Associe un N° de Stock (1, 2, 3...) à un Lien Sécurisé (849021...)</p>
             
             <div class="row g-3 align-items-end">
-                <div class="col-md-2">
-                    <label class="form-label">N° Départ</label>
-                    <input type="number" id="startInternalId" class="form-control" placeholder="Ex: 1">
+                <div class="col-md-3">
+                    <label class="form-label">N° Stock de départ</label>
+                    <input type="number" id="startStockId" class="form-control" placeholder="Ex: 1">
                 </div>
-                <div class="col-md-2">
+                <div class="col-md-3">
                     <label class="form-label">Quantité</label>
                     <input type="number" id="quantity" class="form-control" value="50">
                 </div>
-                <div class="col-md-4">
-                    <button onclick="createRandomPlaquesInDB()" class="btn btn-primary w-100">
+                <div class="col-md-3">
+                    <button onclick="createHybridPlaques()" class="btn btn-primary w-100">
                         1. Générer
                     </button>
                 </div>
-                <div class="col-md-4">
-                    <button onclick="downloadCSVOnly()" class="btn btn-success w-100">
+                <div class="col-md-3">
+                    <button onclick="downloadHybridCSV()" class="btn btn-success w-100">
                         2. Télécharger CSV
                     </button>
                 </div>
@@ -72,11 +72,11 @@
 
         <div class="card p-4">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5>📋 Stock (Classé par N° Série)</h5>
+                <h5>📋 Liste des Plaques</h5>
                 <div class="d-flex gap-2">
-                    <input type="text" id="searchBox" class="form-control form-control-sm" placeholder="Recherche..." style="width: 200px;">
-                    <button onclick="filterTable()" class="btn btn-primary btn-sm">🔍</button>
-                    <button onclick="loadPlaques()" class="btn btn-outline-secondary btn-sm">🔄</button>
+                    <input type="text" id="searchBox" class="form-control form-control-sm" placeholder="N° Stock ou ID..." style="width: 200px;">
+                    <button onclick="filterTable()" class="btn btn-primary btn-sm">🔍 Chercher</button>
+                    <button onclick="loadPlaques()" class="btn btn-outline-secondary btn-sm" title="Tout réafficher">🔄</button>
                 </div>
             </div>
             <div class="table-responsive">
@@ -84,12 +84,12 @@
                     <thead class="table-dark">
                         <tr>
                             <th class="admin-col" style="width: 40px;"><input type="checkbox" id="selectAllBox" onchange="toggleSelectAll()"></th>
-                            <th style="width: 10%">N° Série</th>
-                            <th style="width: 15%">ID Secret (Lien)</th>
-                            <th style="width: 30%">Lien Usine</th>
-                            <th style="width: 20%">Redirection Client</th>
+                            <th style="width: 10%">N° Stock</th>
+                            <th style="width: 15%">ID Public (Lien)</th>
+                            <th style="width: 30%">Lien Complet</th>
+                            <th style="width: 25%">Redirection Client</th>
                             <th style="width: 5%">Vues</th>
-                            <th style="width: 20%" class="text-end">Actions</th>
+                            <th style="width: 15%" class="text-end">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="tableBody"></tbody>
@@ -115,9 +115,11 @@
         const db = firebase.firestore();
         const auth = firebase.auth();
         let isAdmin = false;
-        let lastGeneratedBatch = []; // Pour l'export CSV immédiat
+        
+        // On stocke les plaques qu'on vient de créer pour l'export immédiat
+        let lastCreatedBatch = [];
 
-        function generateSecret() { return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15); }
+        function generateSecret() { return Math.random().toString(36).substring(2, 15); }
         function generateRandomID() { return Math.floor(100000 + Math.random() * 900000).toString(); }
 
         auth.onAuthStateChanged((user) => {
@@ -126,76 +128,94 @@
                 document.getElementById('dashboard').style.display = 'block';
                 document.getElementById('userEmailDisplay').innerText = user.email;
                 isAdmin = (user.email === MY_ADMIN_EMAIL);
+
                 if(isAdmin) {
                     document.getElementById('adminOnlyZone').style.display = 'block';
                     const style = document.createElement('style');
                     style.innerHTML = '.admin-col { display: table-cell !important; }';
                     document.head.appendChild(style);
-                } else { document.getElementById('adminOnlyZone').style.display = 'none'; }
+                } else {
+                    document.getElementById('adminOnlyZone').style.display = 'none';
+                }
                 loadPlaques();
-            } else { document.getElementById('loginScreen').style.display = 'block'; document.getElementById('dashboard').style.display = 'none'; }
+            } else {
+                document.getElementById('loginScreen').style.display = 'block';
+                document.getElementById('dashboard').style.display = 'none';
+            }
         });
 
-        function login() { auth.signInWithEmailAndPassword(document.getElementById('email').value, document.getElementById('password').value).catch(e => document.getElementById('loginError').innerText = e.message); }
+        function login() {
+            const email = document.getElementById('email').value;
+            const pass = document.getElementById('password').value;
+            auth.signInWithEmailAndPassword(email, pass).catch(e => document.getElementById('loginError').innerText = e.message);
+        }
         function logout() { auth.signOut(); }
 
-        // --- GÉNÉRATION DOUBLE NUMÉRO ---
-        async function createRandomPlaquesInDB() {
+        // --- GÉNÉRATION HYBRIDE ---
+        async function createHybridPlaques() {
             if (!isAdmin) return;
-            const startNum = parseInt(document.getElementById('startInternalId').value);
+            const startStock = parseInt(document.getElementById('startStockId').value);
             const qty = parseInt(document.getElementById('quantity').value);
             const status = document.getElementById('batchStatus');
             
-            if (!startNum || !qty) return alert("Remplis le N° de Départ et la Quantité !");
+            if (!startStock || !qty) return alert("Remplis le N° de stock et la quantité !");
 
-            status.innerHTML = `<span class="text-warning">⏳ Génération en cours...</span>`;
+            status.innerHTML = `<span class="text-warning">⏳ Création en cours...</span>`;
+            
             const batch = db.batch();
-            lastGeneratedBatch = [];
+            lastCreatedBatch = []; // Reset pour l'export
             let count = 0;
 
             for (let i = 0; i < qty; i++) {
-                let internalNum = startNum + i; // 1, 2, 3...
-                let publicID = generateRandomID(); // 849201...
+                // 1. On calcule le numéro de stock (ex: 1, 2, 3...)
+                let internalNum = startStock + i;
                 
-                // Petit check anti-doublon local
-                while(lastGeneratedBatch.some(item => item.publicID === publicID)) { publicID = generateRandomID(); }
+                // 2. On génère l'ID public aléatoire (ex: 849201)
+                let publicId = generateRandomID();
 
-                lastGeneratedBatch.push({ internal: internalNum, publicID: publicID });
-                
-                const docRef = db.collection("plaques").doc(publicID);
-                batch.set(docRef, {
-                    internal_id: internalNum, // On sauvegarde le numéro de série !
+                // On prépare les données
+                const docRef = db.collection("plaques").doc(publicId);
+                const plaqueData = {
+                    internalId: internalNum, // On stocke le numéro séquentiel DANS la plaque
                     url: "", 
                     scans: 0, 
                     createdAt: new Date(),
                     secret: generateSecret()
-                }, { merge: true });
+                };
+
+                batch.set(docRef, plaqueData, { merge: true });
                 
+                // On garde en mémoire pour le CSV
+                lastCreatedBatch.push({ internal: internalNum, public: publicId });
+
                 count++;
                 if (count >= 400) { await batch.commit(); count = 0; }
             }
 
             try {
                 await batch.commit();
-                status.innerHTML = `<span class="text-success">✅ Terminé ! Plaques n° ${startNum} à ${startNum + qty - 1} créées.</span>`;
+                status.innerHTML = `<span class="text-success">✅ ${qty} plaques créées (Stock N°${startStock} à N°${startStock+qty-1}) !</span>`;
                 loadPlaques();
-            } catch (error) { status.innerHTML = `<span class="text-danger">Erreur : ${error.message}</span>`; }
+            } catch (error) {
+                status.innerHTML = `<span class="text-danger">Erreur : ${error.message}</span>`;
+            }
         }
 
-        // CSV : COLONNE 1 = N° SÉRIE, COLONNE 2 = LIEN QR
-        function downloadCSVOnly() {
+        // --- EXPORT CSV PRO ---
+        function downloadHybridCSV() {
             if (!isAdmin) return;
-            if (lastGeneratedBatch.length === 0) return alert("Génère d'abord des plaques !");
+            if (lastCreatedBatch.length === 0) return alert("Génère d'abord des plaques !");
 
-            let csvContent = "data:text/csv;charset=utf-8,NUMERO_STICKER,LIEN_QR_CODE\n";
-            lastGeneratedBatch.forEach(item => {
-                csvContent += `${item.internal},${BASE_URL + item.publicID}\n`;
+            let csvContent = "data:text/csv;charset=utf-8,NO_STOCK_INTERNE,ID_PUBLIC_ALEATOIRE,LIEN_QR_CODE\n";
+            
+            lastCreatedBatch.forEach(item => {
+                csvContent += `${item.internal},${item.public},${BASE_URL + item.public}\n`;
             });
 
             const encodedUri = encodeURI(csvContent);
             const link = document.createElement("a");
             link.setAttribute("href", encodedUri);
-            link.setAttribute("download", `PROD_stickers_${lastGeneratedBatch[0].internal}_a_${lastGeneratedBatch[lastGeneratedBatch.length-1].internal}.csv`);
+            link.setAttribute("download", `export_stock_${lastCreatedBatch[0].internal}_a_${lastCreatedBatch[lastCreatedBatch.length-1].internal}.csv`);
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -205,82 +225,74 @@
             const tbody = document.getElementById('tableBody');
             tbody.innerHTML = "<tr><td colspan='7' class='text-center'>Chargement...</td></tr>";
             
-            db.collection("plaques").limit(1000).get().then((snapshot) => {
+            db.collection("plaques").orderBy("createdAt", "desc").limit(500).get().then((snapshot) => {
                 tbody.innerHTML = "";
                 if (snapshot.empty) return tbody.innerHTML = "<tr><td colspan='7' class='text-center'>Vide.</td></tr>";
 
-                let plaquesArray = [];
-                snapshot.forEach(doc => plaquesArray.push({ id: doc.id, data: doc.data() }));
-
-                // TRI PAR NUMÉRO DE SÉRIE (INTERNAL_ID)
-                plaquesArray.sort((a, b) => {
-                    let numA = a.data.internal_id || 0; // 0 si ancienne plaque
-                    let numB = b.data.internal_id || 0;
-                    return numA - numB; // Ordre croissant (1, 2, 3...)
-                });
-
-                plaquesArray.forEach(item => {
-                    const id = item.id; // L'ID public (ex: 849201)
-                    const data = item.data;
-                    const internal = data.internal_id ? `<span class="internal-badge">${data.internal_id}</span>` : `<span class="text-muted">-</span>`;
-
-                    let checkCell = isAdmin ? `<td class="admin-col"><input type="checkbox" class="plaque-checkbox" value="${id}"></td>` : "";
-                    let deleteBtn = isAdmin ? `<button onclick="deletePlaque('${id}')" class="btn btn-outline-danger btn-sm">🗑️</button>` : "";
-                    const statsLink = `stats.html?id=${id}&secret=${data.secret || ''}`;
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const publicId = doc.id; // L'ID aléatoire est la clé du document
+                    const internalId = data.internalId || "?"; // Le numéro de stock
+                    
+                    let checkCell = isAdmin ? `<td class="admin-col"><input type="checkbox" class="plaque-checkbox" value="${publicId}" onchange="updateBulkState()"></td>` : "";
+                    let deleteBtn = isAdmin ? `<button onclick="deletePlaque('${publicId}')" class="btn btn-outline-danger btn-sm" title="Supprimer">🗑️</button>` : "";
+                    
+                    const secretParam = data.secret ? `&secret=${data.secret}` : "";
+                    const statsLink = `stats.html?id=${publicId}${secretParam}`;
 
                     const row = `
                         <tr>
                             ${checkCell}
-                            <td>${internal}</td>
-                            <td><span class="id-badge">${id}</span></td>
-                            <td><span class="factory-link">${BASE_URL + id}</span></td>
-                            <td><input type="text" class="form-control form-control-sm" id="url-${id}" value="${data.url || ""}"></td>
+                            <td class="text-center"><span class="badge-stock">#${internalId}</span></td>
+                            <td><span class="badge-public">${publicId}</span></td>
+                            <td><span class="factory-link">${BASE_URL + publicId}</span></td>
+                            <td><input type="text" class="form-control form-control-sm" id="url-${publicId}" value="${data.url || ""}"></td>
                             <td class="text-center">${data.scans || 0}</td>
                             <td class="text-end">
                                 <a href="${statsLink}" target="_blank" class="btn btn-info btn-sm me-1 text-white">📊</a>
-                                <button onclick="saveOne('${id}', '${data.secret}')" class="btn btn-success btn-sm me-1">💾</button>
+                                <button onclick="saveOne('${publicId}', '${data.secret || ''}')" class="btn btn-success btn-sm me-1">💾</button>
                                 ${deleteBtn}
                             </td>
                         </tr>
                     `;
                     tbody.innerHTML += row;
                 });
-                toggleSelectAll(); // Rebind events
+                updateBulkState();
             });
         }
 
-        // --- RECHERCHE AMÉLIORÉE (Cherche ID Public OU N° Série) ---
+        // RECHERCHE AVANCÉE (Cherche dans Stock OU Public ID)
         function filterTable() {
-            const input = document.getElementById("searchBox");
-            const filter = input.value.toUpperCase();
-            const tr = document.getElementById("tableBody").getElementsByTagName("tr");
-            if (filter === "") { for (let i = 0; i < tr.length; i++) tr[i].style.display = ""; return; }
+            const filter = document.getElementById("searchBox").value.toUpperCase();
+            if(!filter) { loadPlaques(); return; } // Reset simple
 
-            for (let i = 0; i < tr.length; i++) {
-                const internalBadge = tr[i].querySelector(".internal-badge");
-                const publicBadge = tr[i].querySelector(".id-badge");
-                const urlInput = tr[i].querySelector("input[type='text']");
+            const rows = document.getElementById("tableBody").getElementsByTagName("tr");
+            for (let i = 0; i < rows.length; i++) {
+                const stockCell = rows[i].querySelector(".badge-stock");
+                const publicCell = rows[i].querySelector(".badge-public");
                 
-                let text = "";
-                if(internalBadge) text += internalBadge.innerText + " ";
-                if(publicBadge) text += publicBadge.innerText + " ";
-                if(urlInput) text += urlInput.value;
-
-                if (text.toUpperCase().indexOf(filter) > -1) tr[i].style.display = "";
-                else tr[i].style.display = "none";
+                let textStock = stockCell ? stockCell.textContent : "";
+                let textPublic = publicCell ? publicCell.textContent : "";
+                
+                if (textStock.indexOf(filter) > -1 || textPublic.indexOf(filter) > -1) {
+                    rows[i].style.display = "";
+                } else {
+                    rows[i].style.display = "none";
+                }
             }
         }
 
         function saveOne(id, secret) {
             const newUrl = document.getElementById(`url-${id}`).value;
             let updates = { url: newUrl };
-            if(!secret || secret === 'undefined') updates.secret = generateSecret();
-            db.collection("plaques").doc(id).set(updates, { merge: true }).then(() => { alert("Sauvegardé !"); if(!secret) loadPlaques(); });
+            if (!secret) updates.secret = generateSecret();
+            db.collection("plaques").doc(id).set(updates, { merge: true }).then(() => alert("OK !"));
         }
+
         function deletePlaque(id) { if (!isAdmin) return; if(confirm("Supprimer ?")) db.collection("plaques").doc(id).delete().then(() => loadPlaques()); }
-        function toggleSelectAll() { const master = document.getElementById('selectAllBox'); document.querySelectorAll('.plaque-checkbox').forEach(box => box.checked = master.checked); updateBulkState(); }
-        function updateBulkState() { const count = document.querySelectorAll('.plaque-checkbox:checked').length; const bar = document.getElementById('bulkActionsBar'); document.getElementById('selectedCount').innerText = count; count > 0 ? (bar.classList.remove('d-none'), bar.classList.add('d-flex')) : (bar.classList.add('d-none'), bar.classList.remove('d-flex')); }
-        async function deleteSelected() { if (!isAdmin) return; const boxes = document.querySelectorAll('.plaque-checkbox:checked'); if (boxes.length === 0) return; if(confirm(`Supprimer ${boxes.length} plaques ?`)) { const promises = []; boxes.forEach(box => promises.push(db.collection("plaques").doc(box.value).delete())); await Promise.all(promises); loadPlaques(); } }
+        function toggleSelectAll() { const m = document.getElementById('selectAllBox'); document.querySelectorAll('.plaque-checkbox').forEach(b => b.checked = m.checked); updateBulkState(); }
+        function updateBulkState() { const c = document.querySelectorAll('.plaque-checkbox:checked').length; const b = document.getElementById('bulkActionsBar'); document.getElementById('selectedCount').innerText = c; c>0?(b.classList.remove('d-none'),b.classList.add('d-flex')):(b.classList.add('d-none'),b.classList.remove('d-flex')); }
+        async function deleteSelected() { if (!isAdmin) return; const b = document.querySelectorAll('.plaque-checkbox:checked'); if(!b.length)return; if(confirm("Supprimer "+b.length+" ?")){ const p=[]; b.forEach(x=>p.push(db.collection("plaques").doc(x.value).delete())); await Promise.all(p); loadPlaques(); } }
     </script>
 </body>
 </html>
