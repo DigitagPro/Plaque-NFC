@@ -259,54 +259,51 @@
             }
         }
 
-        // --- SAUVEGARDE INTELLIGENTE (Ajoute https:// + Visuel) ---
-function saveOne(id, secret) {
-    // 1. On récupère la case et la valeur
-    const input = document.getElementById(`url-${id}`);
-    let newUrl = input.value.trim();
+        // --- SAUVEGARDE INTELLIGENTE (Auto-HTTPS + Animation) ---
+        function saveOne(id, secret) {
+            // 1. On récupère la case et la valeur
+            const input = document.getElementById(`url-${id}`);
+            let newUrl = input.value.trim();
 
-    // 2. CORRECTION AUTOMATIQUE
-    // Si il y a du texte, mais pas de "http" au début, on l'ajoute
-    if (newUrl && !newUrl.startsWith('http')) {
-        newUrl = 'https://' + newUrl;
-        input.value = newUrl; // On met à jour l'affichage pour que tu le voies
-    }
+            // 2. CORRECTION AUTOMATIQUE
+            // Si il y a du texte, mais pas de "http" au début, on l'ajoute
+            if (newUrl && !newUrl.startsWith('http')) {
+                newUrl = 'https://' + newUrl;
+                input.value = newUrl; // On met à jour l'affichage
+            }
 
-    let updates = { url: newUrl };
+            let updates = { url: newUrl };
 
-    // Si c'est une vieille plaque sans secret, on en génère un maintenant
-    if (!secret || secret === 'undefined' || secret === '') {
-        updates.secret = generateSecret();
-    }
+            // Si c'est une vieille plaque sans secret, on en génère un maintenant
+            if (!secret || secret === 'undefined' || secret === '') {
+                updates.secret = generateSecret();
+            }
 
-    // 3. Enregistrement dans Firebase
-    db.collection("plaques").doc(id).set(updates, { merge: true })
-        .then(() => {
-            // 4. Petit effet visuel sur le bouton (au lieu de l'alerte)
-            // On récupère le bouton qui a été cliqué
-            const btn = window.event.target; 
-            const originalText = btn.innerText; // On garde en mémoire l'icône (💾)
+            // 3. Enregistrement
+            db.collection("plaques").doc(id).set(updates, { merge: true })
+                .then(() => {
+                    // 4. Animation visuelle
+                    const btn = window.event.target; 
+                    const originalText = btn.innerText;
 
-            // On change le bouton en "Validé"
-            btn.innerText = "✅";
-            btn.classList.remove("btn-success");
-            btn.classList.add("btn-warning"); // Devient jaune/orange
+                    btn.innerText = "✅";
+                    btn.classList.remove("btn-success");
+                    btn.classList.add("btn-warning");
 
-            // Après 1 seconde, on remet comme avant
-            setTimeout(() => {
-                btn.innerText = "💾"; // On remet la disquette
-                btn.classList.remove("btn-warning");
-                btn.classList.add("btn-success"); // Redevient vert
+                    setTimeout(() => {
+                        btn.innerText = "💾";
+                        btn.classList.remove("btn-warning");
+                        btn.classList.add("btn-success");
 
-                // Si on a créé un secret, on doit recharger le tableau 
-                // pour que le bouton "Stats" fonctionne immédiatement
-                if (!secret || secret === 'undefined' || secret === '') {
-                    loadPlaques();
-                }
-            }, 1000);
-        })
-        .catch(e => alert("Erreur de sauvegarde : " + e.message));
-}
+                        // Rechargement si nouveau secret créé
+                        if (!secret || secret === 'undefined' || secret === '') {
+                            loadPlaques();
+                        }
+                    }, 1000);
+                })
+                .catch(e => alert("Erreur de sauvegarde : " + e.message));
+        }
+
         function deletePlaque(id) { if (!isAdmin) return; if(confirm("Supprimer ?")) db.collection("plaques").doc(id).delete().then(() => loadPlaques()); }
         function toggleSelectAll() { const m = document.getElementById('selectAllBox'); document.querySelectorAll('.plaque-checkbox').forEach(b => b.checked = m.checked); updateBulkState(); }
         function updateBulkState() { const c = document.querySelectorAll('.plaque-checkbox:checked').length; const b = document.getElementById('bulkActionsBar'); document.getElementById('selectedCount').innerText = c; c>0?(b.classList.remove('d-none'),b.classList.add('d-flex')):(b.classList.add('d-none'),b.classList.remove('d-flex')); }
