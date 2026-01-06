@@ -197,7 +197,6 @@
             
             db.collection("plaques").orderBy("createdAt", "desc").limit(500).get().then((snapshot) => {
                 tbody.innerHTML = "";
-                // MISE A JOUR DU COMPTEUR TOTAL
                 document.getElementById('totalCount').innerText = snapshot.size;
 
                 if (snapshot.empty) return tbody.innerHTML = "<tr><td colspan='6' class='text-center'>Vide.</td></tr>";
@@ -212,6 +211,7 @@
                     const secretParam = data.secret ? `&secret=${data.secret}` : "";
                     const statsLink = `stats.html?id=${publicId}${secretParam}`;
 
+                    // MODIFICATION ICI : On passe "this" dans la fonction saveOne
                     const row = `
                         <tr>
                             ${checkCell}
@@ -221,7 +221,7 @@
                             <td class="text-center">${data.scans || 0}</td>
                             <td class="text-end">
                                 <a href="${statsLink}" target="_blank" class="btn btn-info btn-sm me-1 text-white">📊</a>
-                                <button onclick="saveOne('${publicId}', '${data.secret || ''}')" class="btn btn-success btn-sm me-1">💾</button>
+                                <button onclick="saveOne(this, '${publicId}', '${data.secret || ''}')" class="btn btn-success btn-sm me-1">💾</button>
                                 ${deleteBtn}
                             </td>
                         </tr>
@@ -232,49 +232,40 @@
             });
         }
 
-        // --- RECHERCHE EXACTE ET CORRECTION DU VIDE ---
         function filterTable() {
             const searchInput = document.getElementById("searchBox").value.trim();
             const rows = document.getElementById("tableBody").getElementsByTagName("tr");
 
-            // CAS 1 : Si la case est vide, on affiche TOUT
             if (searchInput === "") {
-                for (let i = 0; i < rows.length; i++) {
-                    rows[i].style.display = ""; 
-                }
-                return; // On s'arrête là
+                for (let i = 0; i < rows.length; i++) { rows[i].style.display = ""; }
+                return;
             }
 
-            // CAS 2 : Sinon, on cherche le numéro exact
             for (let i = 0; i < rows.length; i++) {
                 const stockCell = rows[i].querySelector(".badge-stock");
                 if (stockCell) {
                     const stockNumber = stockCell.textContent.replace('#', '').trim();
-                    if (stockNumber === searchInput) {
-                        rows[i].style.display = "";
-                    } else {
-                        rows[i].style.display = "none";
-                    }
+                    if (stockNumber === searchInput) { rows[i].style.display = ""; } 
+                    else { rows[i].style.display = "none"; }
                 }
             }
         }
 
-        // --- SAUVEGARDE INTELLIGENTE (Auto-HTTPS + Animation) ---
-        function saveOne(id, secret) {
-            // 1. On récupère la case et la valeur
+        // --- SAUVEGARDE FIXÉE (Utilise le bouton passé en paramètre) ---
+        function saveOne(btnElement, id, secret) {
+            // 1. On récupère la case
             const input = document.getElementById(`url-${id}`);
             let newUrl = input.value.trim();
 
-            // 2. CORRECTION AUTOMATIQUE
-            // Si il y a du texte, mais pas de "http" au début, on l'ajoute
+            // 2. Correction Auto https://
             if (newUrl && !newUrl.startsWith('http')) {
                 newUrl = 'https://' + newUrl;
-                input.value = newUrl; // On met à jour l'affichage
+                input.value = newUrl;
             }
 
             let updates = { url: newUrl };
 
-            // Si c'est une vieille plaque sans secret, on en génère un maintenant
+            // Si vieux compte sans secret
             if (!secret || secret === 'undefined' || secret === '') {
                 updates.secret = generateSecret();
             }
@@ -282,20 +273,19 @@
             // 3. Enregistrement
             db.collection("plaques").doc(id).set(updates, { merge: true })
                 .then(() => {
-                    // 4. Animation visuelle
-                    const btn = window.event.target; 
-                    const originalText = btn.innerText;
+                    // 4. Animation sur le bouton (on utilise btnElement passé directement)
+                    const originalText = "💾";
 
-                    btn.innerText = "✅";
-                    btn.classList.remove("btn-success");
-                    btn.classList.add("btn-warning");
+                    btnElement.innerText = "✅";
+                    btnElement.classList.remove("btn-success");
+                    btnElement.classList.add("btn-warning");
 
                     setTimeout(() => {
-                        btn.innerText = "💾";
-                        btn.classList.remove("btn-warning");
-                        btn.classList.add("btn-success");
+                        btnElement.innerText = originalText;
+                        btnElement.classList.remove("btn-warning");
+                        btnElement.classList.add("btn-success");
 
-                        // Rechargement si nouveau secret créé
+                        // Reload si nécessaire
                         if (!secret || secret === 'undefined' || secret === '') {
                             loadPlaques();
                         }
