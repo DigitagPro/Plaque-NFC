@@ -12,10 +12,8 @@
         body { background-color: #f0f2f5; padding: 20px; }
         .login-container { max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         #dashboard { display: none; }
-        /* Zones cachées par défaut */
         #adminOnlyZone, .admin-col { display: none; }
         .factory-link { font-size: 0.8em; color: #666; font-family: monospace; }
-        .selected-row { background-color: #ffe5e5 !important; }
     </style>
 </head>
 <body>
@@ -50,41 +48,35 @@
                     <input type="number" id="quantity" class="form-control" value="50">
                 </div>
                 <div class="col-md-3">
-                    <button onclick="createPlaquesInDB()" class="btn btn-primary w-100">
-                        1. Créer dans la Base
-                    </button>
+                    <button onclick="createPlaquesInDB()" class="btn btn-primary w-100">1. Créer dans la Base</button>
                 </div>
                 <div class="col-md-3">
-                    <button onclick="downloadCSVOnly()" class="btn btn-success w-100">
-                        2. Télécharger CSV
-                    </button>
+                    <button onclick="downloadCSVOnly()" class="btn btn-success w-100">2. Télécharger CSV</button>
                 </div>
             </div>
             <div id="batchStatus" class="mt-2 fw-bold"></div>
-        </div>
-
-        <div id="bulkActionsBar" class="alert alert-danger d-none align-items-center justify-content-between">
-            <span><strong><span id="selectedCount">0</span></strong> plaques sélectionnées.</span>
-            <button onclick="deleteSelected()" class="btn btn-danger btn-sm">🗑️ Tout Supprimer</button>
+            
+            <div id="bulkActionsBar" class="alert alert-danger mt-3 d-none align-items-center justify-content-between">
+                <span><strong><span id="selectedCount">0</span></strong> plaques sélectionnées.</span>
+                <button onclick="deleteSelected()" class="btn btn-danger btn-sm">🗑️ Tout Supprimer</button>
+            </div>
         </div>
 
         <div class="card p-4">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5>📋 Liste des Plaques (Triées par ID)</h5>
+                <h5>📋 Liste des Plaques</h5>
                 <button onclick="loadPlaques()" class="btn btn-outline-secondary btn-sm">🔄 Actualiser</button>
             </div>
             <div class="table-responsive">
                 <table class="table table-hover align-middle">
                     <thead class="table-dark">
                         <tr>
-                            <th class="admin-col" style="width: 40px;">
-                                <input type="checkbox" id="selectAllBox" onchange="toggleSelectAll()">
-                            </th>
+                            <th class="admin-col" style="width: 40px;"><input type="checkbox" id="selectAllBox" onchange="toggleSelectAll()"></th>
                             <th style="width: 10%">ID</th>
                             <th style="width: 30%">Lien Usine</th>
-                            <th style="width: 35%">Redirection Client</th>
+                            <th style="width: 30%">Redirection Client</th>
                             <th style="width: 5%">Vues</th>
-                            <th style="width: 15%" class="text-end">Actions</th>
+                            <th style="width: 25%" class="text-end">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="tableBody"></tbody>
@@ -94,7 +86,6 @@
     </div>
 
     <script>
-        // --- 1. CONFIGURATION ---
         const firebaseConfig = {
             apiKey: "AIzaSyBjfZ6GHzg-IkP-i_1RMcWNqvyhSlrUMbk",
             authDomain: "plaques-nfc-c6da0.firebaseapp.com",
@@ -104,10 +95,7 @@
             appId: "1:790493007980:web:de515aa27e78e6a9a58849",
             measurementId: "G-KWT3LZV7S5"
         };
-        
         const BASE_URL = "https://qr.digitagpro.fr/?id=";
-        
-        // ⚠️ METS TON EMAIL ADMIN ICI
         const MY_ADMIN_EMAIL = "digitagpro30@gmail.com"; 
 
         firebase.initializeApp(firebaseConfig);
@@ -115,25 +103,26 @@
         const auth = firebase.auth();
         let isAdmin = false;
 
-        // --- 2. GESTION DES RÔLES ---
+        // Fonction pour générer une clé secrète aléatoire
+        function generateSecret() {
+            return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        }
+
         auth.onAuthStateChanged((user) => {
             if (user) {
                 document.getElementById('loginScreen').style.display = 'none';
                 document.getElementById('dashboard').style.display = 'block';
                 document.getElementById('userEmailDisplay').innerText = user.email;
-
                 isAdmin = (user.email === MY_ADMIN_EMAIL);
 
                 if(isAdmin) {
                     document.getElementById('adminOnlyZone').style.display = 'block';
-                    // On montre les colonnes admin
                     const style = document.createElement('style');
                     style.innerHTML = '.admin-col { display: table-cell !important; }';
                     document.head.appendChild(style);
                 } else {
                     document.getElementById('adminOnlyZone').style.display = 'none';
                 }
-
                 loadPlaques();
             } else {
                 document.getElementById('loginScreen').style.display = 'block';
@@ -148,29 +137,32 @@
         }
         function logout() { auth.signOut(); }
 
-        // --- 3. FONCTIONS SÉPARÉES ---
-
+        // CRÉATION AVEC SECRET
         async function createPlaquesInDB() {
             if (!isAdmin) return;
             const start = parseInt(document.getElementById('startId').value);
             const qty = parseInt(document.getElementById('quantity').value);
             const status = document.getElementById('batchStatus');
             
-            if (!start || !qty) return alert("Remplis le numéro de départ et la quantité !");
+            if (!start || !qty) return alert("Infos manquantes !");
 
-            status.innerHTML = `<span class="text-warning">⏳ Création dans la base en cours...</span>`;
+            status.innerHTML = `<span class="text-warning">⏳ Création...</span>`;
             const batchPromises = [];
 
             for (let i = 0; i < qty; i++) {
                 let currentId = (start + i).toString();
+                // On ajoute le champ 'secret' ici
                 batchPromises.push(db.collection("plaques").doc(currentId).set({
-                    url: "", scans: 0, createdAt: new Date()
+                    url: "", 
+                    scans: 0, 
+                    createdAt: new Date(),
+                    secret: generateSecret() // Clé de sécurité
                 }, { merge: true }));
             }
 
             try {
                 await Promise.all(batchPromises);
-                status.innerHTML = `<span class="text-success">✅ ${qty} plaques créées dans la base ! Tu peux maintenant télécharger le CSV.</span>`;
+                status.innerHTML = `<span class="text-success">✅ ${qty} plaques créées avec sécurité !</span>`;
                 loadPlaques();
             } catch (error) {
                 status.innerHTML = `<span class="text-danger">Erreur : ${error.message}</span>`;
@@ -181,69 +173,45 @@
             if (!isAdmin) return;
             const start = parseInt(document.getElementById('startId').value);
             const qty = parseInt(document.getElementById('quantity').value);
-            
-            if (!start || !qty) return alert("Remplis le numéro de départ et la quantité !");
-
+            if (!start || !qty) return alert("Infos manquantes !");
             let csvContent = "data:text/csv;charset=utf-8,ID_PLAQUE,LIEN_A_IMPRIMER\n";
             for (let i = 0; i < qty; i++) {
                 let currentId = (start + i).toString();
-                let fullUrl = BASE_URL + currentId;
-                csvContent += `${currentId},${fullUrl}\n`;
+                csvContent += `${currentId},${BASE_URL + currentId}\n`;
             }
-
             const encodedUri = encodeURI(csvContent);
             const link = document.createElement("a");
             link.setAttribute("href", encodedUri);
-            link.setAttribute("download", `export_usine_${start}_a_${start+qty-1}.csv`);
+            link.setAttribute("download", `export_${start}_${start+qty-1}.csv`);
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
         }
 
-        // --- 4. TABLEAU & TRI NUMÉRIQUE ---
-
         function loadPlaques() {
             const tbody = document.getElementById('tableBody');
             tbody.innerHTML = "<tr><td colspan='6' class='text-center'>Chargement...</td></tr>";
             
-            // On récupère tout (limité à 200 pour la performance)
             db.collection("plaques").limit(200).get().then((snapshot) => {
                 tbody.innerHTML = "";
-                if (snapshot.empty) {
-                    tbody.innerHTML = "<tr><td colspan='6' class='text-center'>Aucune plaque.</td></tr>";
-                    return;
-                }
+                if (snapshot.empty) return tbody.innerHTML = "<tr><td colspan='6' class='text-center'>Vide.</td></tr>";
 
-                // 1. On convertit les résultats en un tableau JavaScript
                 let plaquesArray = [];
-                snapshot.forEach(doc => {
-                    plaquesArray.push({
-                        id: doc.id,
-                        data: doc.data()
-                    });
-                });
+                snapshot.forEach(doc => plaquesArray.push({ id: doc.id, data: doc.data() }));
+                plaquesArray.sort((a, b) => parseInt(a.id) - parseInt(b.id));
 
-                // 2. On trie ce tableau par NUMÉRO d'ID (Ordre croissant)
-                plaquesArray.sort((a, b) => {
-                    return parseInt(a.id) - parseInt(b.id);
-                });
-
-                // 3. On affiche le tableau trié
                 plaquesArray.forEach(item => {
                     const id = item.id;
                     const data = item.data;
                     
-                    // Case à cocher (Admin uniquement)
-                    let checkCell = "";
-                    if (isAdmin) {
-                        checkCell = `<td class="admin-col"><input type="checkbox" class="plaque-checkbox" value="${id}" onchange="updateBulkState()"></td>`;
-                    }
+                    let checkCell = isAdmin ? `<td class="admin-col"><input type="checkbox" class="plaque-checkbox" value="${id}" onchange="updateBulkState()"></td>` : "";
+                    let deleteBtn = isAdmin ? `<button onclick="deletePlaque('${id}')" class="btn btn-outline-danger btn-sm" title="Supprimer">🗑️</button>` : "";
 
-                    // Bouton poubelle (Admin uniquement)
-                    let deleteBtn = "";
-                    if (isAdmin) {
-                        deleteBtn = `<button onclick="deletePlaque('${id}')" class="btn btn-outline-danger btn-sm" title="Supprimer">🗑️</button>`;
-                    }
+                    // CONSTRUCTION DU LIEN SÉCURISÉ
+                    // Si pas de secret (vieille plaque), le lien sera sans token (et donc potentiellement bloqué par stats.html)
+                    // Astuce : En cliquant sur "Save", on générera un secret pour les vieilles plaques.
+                    const secretParam = data.secret ? `&secret=${data.secret}` : "";
+                    const statsLink = `stats.html?id=${id}${secretParam}`;
 
                     const row = `
                         <tr>
@@ -253,77 +221,60 @@
                             <td><input type="text" class="form-control form-control-sm" id="url-${id}" value="${data.url || ""}"></td>
                             <td class="text-center">${data.scans || 0}</td>
                             <td class="text-end">
-                                <button onclick="saveOne('${id}')" class="btn btn-success btn-sm me-1">💾</button>
+                                <a href="${statsLink}" target="_blank" class="btn btn-info btn-sm me-1 text-white" title="Voir Statistiques">📊 Stats</a>
+                                <button onclick="saveOne('${id}', '${data.secret || ''}')" class="btn btn-success btn-sm me-1">💾</button>
                                 ${deleteBtn}
                             </td>
                         </tr>
                     `;
                     tbody.innerHTML += row;
                 });
-                updateBulkState(); // Reset state
+                updateBulkState();
             });
         }
 
-        function saveOne(id) {
+        function saveOne(id, existingSecret) {
             const newUrl = document.getElementById(`url-${id}`).value;
-            db.collection("plaques").doc(id).update({ url: newUrl }).then(() => {
-                alert("Sauvegardé !");
+            let updates = { url: newUrl };
+
+            // AUTO-SÉCURISATION : Si la plaque n'a pas de secret, on en crée un maintenant
+            if (!existingSecret || existingSecret === 'undefined') {
+                updates.secret = generateSecret();
+            }
+
+            db.collection("plaques").doc(id).set(updates, { merge: true }).then(() => {
+                alert("Sauvegardé (et sécurisé) !");
+                if (!existingSecret) loadPlaques(); // Recharger pour afficher le nouveau lien stats
             }).catch(e => alert("Erreur: " + e.message));
         }
 
         function deletePlaque(id) {
             if (!isAdmin) return;
-            if(confirm("Supprimer " + id + " ?")) {
-                db.collection("plaques").doc(id).delete().then(() => loadPlaques());
-            }
+            if(confirm("Supprimer " + id + " ?")) db.collection("plaques").doc(id).delete().then(() => loadPlaques());
         }
 
-        // --- 5. LOGIQUE SÉLECTION MULTIPLE ---
-        
         function toggleSelectAll() {
             const master = document.getElementById('selectAllBox');
-            const boxes = document.querySelectorAll('.plaque-checkbox');
-            boxes.forEach(box => box.checked = master.checked);
+            document.querySelectorAll('.plaque-checkbox').forEach(box => box.checked = master.checked);
             updateBulkState();
         }
 
         function updateBulkState() {
-            const boxes = document.querySelectorAll('.plaque-checkbox:checked');
-            const count = boxes.length;
+            const count = document.querySelectorAll('.plaque-checkbox:checked').length;
             const bar = document.getElementById('bulkActionsBar');
-            
             document.getElementById('selectedCount').innerText = count;
-            
-            if (count > 0) {
-                bar.classList.remove('d-none');
-                bar.classList.add('d-flex');
-            } else {
-                bar.classList.add('d-none');
-                bar.classList.remove('d-flex');
-            }
+            count > 0 ? (bar.classList.remove('d-none'), bar.classList.add('d-flex')) : (bar.classList.add('d-none'), bar.classList.remove('d-flex'));
         }
 
         async function deleteSelected() {
             if (!isAdmin) return;
             const boxes = document.querySelectorAll('.plaque-checkbox:checked');
-            const count = boxes.length;
-
-            if (count === 0) return;
-
-            if(confirm(`⚠️ ATTENTION : Tu vas supprimer définitivement ${count} plaques.\nEs-tu sûr ?`)) {
+            if (boxes.length === 0) return;
+            if(confirm(`Supprimer ${boxes.length} plaques ?`)) {
                 const promises = [];
-                boxes.forEach(box => {
-                    promises.push(db.collection("plaques").doc(box.value).delete());
-                });
-
-                try {
-                    await Promise.all(promises);
-                    alert("Suppression terminée !");
-                    document.getElementById('selectAllBox').checked = false; // Reset master
-                    loadPlaques();
-                } catch (e) {
-                    alert("Erreur : " + e.message);
-                }
+                boxes.forEach(box => promises.push(db.collection("plaques").doc(box.value).delete()));
+                await Promise.all(promises);
+                loadPlaques();
             }
         }
     </script>
