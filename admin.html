@@ -13,9 +13,8 @@
         .login-container { max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         #dashboard { display: none; }
         #adminOnlyZone, .admin-col { display: none; }
-        .factory-link { font-size: 0.8em; color: #666; font-family: monospace; }
-        .badge-stock { background-color: #6c757d; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
-        .badge-public { background-color: #0d6efd; color: white; padding: 4px 8px; border-radius: 4px; font-family: monospace; }
+        .factory-link { font-size: 0.85em; color: #555; font-family: monospace; background: #eee; padding: 2px 5px; border-radius: 4px; }
+        .badge-stock { background-color: #6c757d; color: white; padding: 5px 10px; border-radius: 4px; font-weight: bold; font-size: 0.9em; }
     </style>
 </head>
 <body>
@@ -39,8 +38,8 @@
         </div>
 
         <div id="adminOnlyZone" class="card p-4 bg-white border-primary mb-4">
-            <h5 class="text-primary">🏭 Usine de Plaques (Mode Pro)</h5>
-            <p class="text-muted small">Associe un N° de Stock (1, 2, 3...) à un Lien Sécurisé (849021...)</p>
+            <h5 class="text-primary">🏭 Usine de Plaques</h5>
+            <p class="text-muted small">Mode Hybride : Stock Séquentiel (1, 2...) + ID Sécurisé Aléatoire</p>
             
             <div class="row g-3 align-items-end">
                 <div class="col-md-3">
@@ -85,9 +84,7 @@
                         <tr>
                             <th class="admin-col" style="width: 40px;"><input type="checkbox" id="selectAllBox" onchange="toggleSelectAll()"></th>
                             <th style="width: 10%">N° Stock</th>
-                            <th style="width: 15%">ID Public (Lien)</th>
-                            <th style="width: 30%">Lien Complet</th>
-                            <th style="width: 25%">Redirection Client</th>
+                            <th style="width: 35%">Lien Usine (QR)</th> <th style="width: 30%">Redirection Client</th>
                             <th style="width: 5%">Vues</th>
                             <th style="width: 15%" class="text-end">Actions</th>
                         </tr>
@@ -115,8 +112,6 @@
         const db = firebase.firestore();
         const auth = firebase.auth();
         let isAdmin = false;
-        
-        // On stocke les plaques qu'on vient de créer pour l'export immédiat
         let lastCreatedBatch = [];
 
         function generateSecret() { return Math.random().toString(36).substring(2, 15); }
@@ -128,7 +123,6 @@
                 document.getElementById('dashboard').style.display = 'block';
                 document.getElementById('userEmailDisplay').innerText = user.email;
                 isAdmin = (user.email === MY_ADMIN_EMAIL);
-
                 if(isAdmin) {
                     document.getElementById('adminOnlyZone').style.display = 'block';
                     const style = document.createElement('style');
@@ -151,7 +145,6 @@
         }
         function logout() { auth.signOut(); }
 
-        // --- GÉNÉRATION HYBRIDE ---
         async function createHybridPlaques() {
             if (!isAdmin) return;
             const startStock = parseInt(document.getElementById('startStockId').value);
@@ -161,22 +154,18 @@
             if (!startStock || !qty) return alert("Remplis le N° de stock et la quantité !");
 
             status.innerHTML = `<span class="text-warning">⏳ Création en cours...</span>`;
-            
             const batch = db.batch();
-            lastCreatedBatch = []; // Reset pour l'export
+            lastCreatedBatch = []; 
             let count = 0;
 
             for (let i = 0; i < qty; i++) {
-                // 1. On calcule le numéro de stock (ex: 1, 2, 3...)
                 let internalNum = startStock + i;
-                
-                // 2. On génère l'ID public aléatoire (ex: 849201)
                 let publicId = generateRandomID();
-
-                // On prépare les données
                 const docRef = db.collection("plaques").doc(publicId);
+                
+                // On garde les 2 IDs en base
                 const plaqueData = {
-                    internalId: internalNum, // On stocke le numéro séquentiel DANS la plaque
+                    internalId: internalNum, 
                     url: "", 
                     scans: 0, 
                     createdAt: new Date(),
@@ -184,10 +173,7 @@
                 };
 
                 batch.set(docRef, plaqueData, { merge: true });
-                
-                // On garde en mémoire pour le CSV
                 lastCreatedBatch.push({ internal: internalNum, public: publicId });
-
                 count++;
                 if (count >= 400) { await batch.commit(); count = 0; }
             }
@@ -201,17 +187,14 @@
             }
         }
 
-        // --- EXPORT CSV PRO ---
+        // CSV : On garde les 2 colonnes pour l'imprimeur
         function downloadHybridCSV() {
             if (!isAdmin) return;
             if (lastCreatedBatch.length === 0) return alert("Génère d'abord des plaques !");
-
             let csvContent = "data:text/csv;charset=utf-8,NO_STOCK_INTERNE,ID_PUBLIC_ALEATOIRE,LIEN_QR_CODE\n";
-            
             lastCreatedBatch.forEach(item => {
                 csvContent += `${item.internal},${item.public},${BASE_URL + item.public}\n`;
             });
-
             const encodedUri = encodeURI(csvContent);
             const link = document.createElement("a");
             link.setAttribute("href", encodedUri);
@@ -223,20 +206,19 @@
 
         function loadPlaques() {
             const tbody = document.getElementById('tableBody');
-            tbody.innerHTML = "<tr><td colspan='7' class='text-center'>Chargement...</td></tr>";
+            tbody.innerHTML = "<tr><td colspan='6' class='text-center'>Chargement...</td></tr>";
             
             db.collection("plaques").orderBy("createdAt", "desc").limit(500).get().then((snapshot) => {
                 tbody.innerHTML = "";
-                if (snapshot.empty) return tbody.innerHTML = "<tr><td colspan='7' class='text-center'>Vide.</td></tr>";
+                if (snapshot.empty) return tbody.innerHTML = "<tr><td colspan='6' class='text-center'>Vide.</td></tr>";
 
                 snapshot.forEach(doc => {
                     const data = doc.data();
-                    const publicId = doc.id; // L'ID aléatoire est la clé du document
-                    const internalId = data.internalId || "?"; // Le numéro de stock
+                    const publicId = doc.id; 
+                    const internalId = data.internalId || "?"; 
                     
                     let checkCell = isAdmin ? `<td class="admin-col"><input type="checkbox" class="plaque-checkbox" value="${publicId}" onchange="updateBulkState()"></td>` : "";
                     let deleteBtn = isAdmin ? `<button onclick="deletePlaque('${publicId}')" class="btn btn-outline-danger btn-sm" title="Supprimer">🗑️</button>` : "";
-                    
                     const secretParam = data.secret ? `&secret=${data.secret}` : "";
                     const statsLink = `stats.html?id=${publicId}${secretParam}`;
 
@@ -244,7 +226,6 @@
                         <tr>
                             ${checkCell}
                             <td class="text-center"><span class="badge-stock">#${internalId}</span></td>
-                            <td><span class="badge-public">${publicId}</span></td>
                             <td><span class="factory-link">${BASE_URL + publicId}</span></td>
                             <td><input type="text" class="form-control form-control-sm" id="url-${publicId}" value="${data.url || ""}"></td>
                             <td class="text-center">${data.scans || 0}</td>
@@ -261,20 +242,20 @@
             });
         }
 
-        // RECHERCHE AVANCÉE (Cherche dans Stock OU Public ID)
         function filterTable() {
             const filter = document.getElementById("searchBox").value.toUpperCase();
-            if(!filter) { loadPlaques(); return; } // Reset simple
+            if(!filter) { loadPlaques(); return; }
 
             const rows = document.getElementById("tableBody").getElementsByTagName("tr");
             for (let i = 0; i < rows.length; i++) {
                 const stockCell = rows[i].querySelector(".badge-stock");
-                const publicCell = rows[i].querySelector(".badge-public");
+                const factoryLink = rows[i].querySelector(".factory-link"); // On cherche dans le lien complet maintenant
                 
                 let textStock = stockCell ? stockCell.textContent : "";
-                let textPublic = publicCell ? publicCell.textContent : "";
+                let textLink = factoryLink ? factoryLink.textContent : "";
                 
-                if (textStock.indexOf(filter) > -1 || textPublic.indexOf(filter) > -1) {
+                // Si le filtre est trouvé dans le N° Stock OU le Lien (qui contient l'ID public)
+                if (textStock.indexOf(filter) > -1 || textLink.indexOf(filter) > -1) {
                     rows[i].style.display = "";
                 } else {
                     rows[i].style.display = "none";
