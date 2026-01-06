@@ -71,7 +71,8 @@
 
         <div class="card p-4">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5>📋 Liste des Plaques</h5>
+                <h5>📋 Liste (<span id="totalCount">0</span>)</h5>
+                
                 <div class="d-flex gap-2">
                     <input type="text" id="searchBox" class="form-control form-control-sm" placeholder="N° Stock..." style="width: 200px;">
                     <button onclick="filterTable()" class="btn btn-primary btn-sm">🔍 Chercher</button>
@@ -163,37 +164,24 @@
                 let internalNum = startStock + i;
                 let publicId = generateRandomID();
                 const docRef = db.collection("plaques").doc(publicId);
-                
-                const plaqueData = {
-                    internalId: internalNum, 
-                    url: "", 
-                    scans: 0, 
-                    createdAt: new Date(),
-                    secret: generateSecret()
-                };
-
+                const plaqueData = { internalId: internalNum, url: "", scans: 0, createdAt: new Date(), secret: generateSecret() };
                 batch.set(docRef, plaqueData, { merge: true });
                 lastCreatedBatch.push({ internal: internalNum, public: publicId });
                 count++;
                 if (count >= 400) { await batch.commit(); count = 0; }
             }
-
             try {
                 await batch.commit();
                 status.innerHTML = `<span class="text-success">✅ ${qty} plaques créées (Stock N°${startStock} à N°${startStock+qty-1}) !</span>`;
                 loadPlaques();
-            } catch (error) {
-                status.innerHTML = `<span class="text-danger">Erreur : ${error.message}</span>`;
-            }
+            } catch (error) { status.innerHTML = `<span class="text-danger">Erreur : ${error.message}</span>`; }
         }
 
         function downloadHybridCSV() {
             if (!isAdmin) return;
             if (lastCreatedBatch.length === 0) return alert("Génère d'abord des plaques !");
             let csvContent = "data:text/csv;charset=utf-8,NO_STOCK_INTERNE,ID_PUBLIC_ALEATOIRE,LIEN_QR_CODE\n";
-            lastCreatedBatch.forEach(item => {
-                csvContent += `${item.internal},${item.public},${BASE_URL + item.public}\n`;
-            });
+            lastCreatedBatch.forEach(item => { csvContent += `${item.internal},${item.public},${BASE_URL + item.public}\n`; });
             const encodedUri = encodeURI(csvContent);
             const link = document.createElement("a");
             link.setAttribute("href", encodedUri);
@@ -209,6 +197,9 @@
             
             db.collection("plaques").orderBy("createdAt", "desc").limit(500).get().then((snapshot) => {
                 tbody.innerHTML = "";
+                // MISE A JOUR DU COMPTEUR TOTAL
+                document.getElementById('totalCount').innerText = snapshot.size;
+
                 if (snapshot.empty) return tbody.innerHTML = "<tr><td colspan='6' class='text-center'>Vide.</td></tr>";
 
                 snapshot.forEach(doc => {
@@ -241,37 +232,32 @@
             });
         }
 
-// --- RECHERCHE EXACTE (Le chiffre précis) ---
-function filterTable() {
-    // 1. On récupère le chiffre tapé
-    const searchInput = document.getElementById("searchBox").value.trim(); // .trim() enlève les espaces accidentels
+        // --- RECHERCHE EXACTE ET CORRECTION DU VIDE ---
+        function filterTable() {
+            const searchInput = document.getElementById("searchBox").value.trim();
+            const rows = document.getElementById("tableBody").getElementsByTagName("tr");
 
-    // 2. Si la case est vide, on réaffiche tout
-    if (searchInput === "") {
-        const rows = document.getElementById("tableBody").getElementsByTagName("tr");
-        for (let i = 0; i < rows.length; i++) { rows[i].style.display = ""; }
-        return;
-    }
+            // CAS 1 : Si la case est vide, on affiche TOUT
+            if (searchInput === "") {
+                for (let i = 0; i < rows.length; i++) {
+                    rows[i].style.display = ""; 
+                }
+                return; // On s'arrête là
+            }
 
-    const rows = document.getElementById("tableBody").getElementsByTagName("tr");
-    
-    for (let i = 0; i < rows.length; i++) {
-        const stockCell = rows[i].querySelector(".badge-stock");
-        
-        if (stockCell) {
-            // Le tableau affiche "#3", on enlève le "#" pour avoir juste "3"
-            const stockNumber = stockCell.textContent.replace('#', '').trim();
-            
-            // COMPARAISON EXACTE (===)
-            // Si le numéro est EXACTEMENT égal à ce que tu as tapé
-            if (stockNumber === searchInput) {
-                rows[i].style.display = "";
-            } else {
-                rows[i].style.display = "none";
+            // CAS 2 : Sinon, on cherche le numéro exact
+            for (let i = 0; i < rows.length; i++) {
+                const stockCell = rows[i].querySelector(".badge-stock");
+                if (stockCell) {
+                    const stockNumber = stockCell.textContent.replace('#', '').trim();
+                    if (stockNumber === searchInput) {
+                        rows[i].style.display = "";
+                    } else {
+                        rows[i].style.display = "none";
+                    }
+                }
             }
         }
-    }
-}
 
         function saveOne(id, secret) {
             const newUrl = document.getElementById(`url-${id}`).value;
