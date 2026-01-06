@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rapport de Performance - NFC</title>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    
+    <style>
+        body { background-color: #f4f6f9; color: #333; font-family: 'Segoe UI', sans-serif; }
+        .stat-card { background: white; border-radius: 15px; padding: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: center; }
+        .big-number { font-size: 3em; font-weight: bold; color: #0d6efd; }
+        .header-bg { background: linear-gradient(135deg, #0d6efd, #0099ff); color: white; padding: 40px 0; margin-bottom: 30px; border-radius: 0 0 20px 20px; }
+        
+        /* Pour l'impression PDF propre */
+        @media print {
+            .no-print { display: none !important; }
+            body { background-color: white; }
+            .header-bg { color: black; background: white; padding: 0; border-bottom: 2px solid #000; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header-bg text-center">
+        <div class="container">
+            <h1 id="pageTitle">Rapport de Performance</h1>
+            <p class="opacity-75">Statistiques en temps réel de votre plaque NFC</p>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center mb-4 no-print">
+            <a href="#" onclick="window.history.back()" class="btn btn-outline-secondary">← Retour</a>
+            <button onclick="window.print()" class="btn btn-primary">🖨️ Télécharger le Rapport (PDF)</button>
+        </div>
+
+        <div id="loading" class="text-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2">Chargement des données...</p>
+        </div>
+
+        <div id="statsContent" style="display: none;">
+            <div class="row g-4 mb-5">
+                <div class="col-md-4">
+                    <div class="stat-card">
+                        <h5 class="text-muted text-uppercase small">Plaque ID</h5>
+                        <div class="fs-2 fw-bold text-dark" id="displayId">---</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="stat-card">
+                        <h5 class="text-muted text-uppercase small">Total Scans</h5>
+                        <div class="big-number" id="displayScans">0</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="stat-card">
+                        <h5 class="text-muted text-uppercase small">Lien Actuel</h5>
+                        <div class="text-truncate mt-2" id="displayUrl" style="max-width: 100%;">---</div>
+                        <small class="text-success">● Actif</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card p-4 border-0 shadow-sm">
+                <h4 class="mb-4">Répartition (Démonstration)</h4>
+                <p class="text-muted small">Note : L'historique détaillé par date sera activé prochainement. Voici vos données actuelles.</p>
+                <div style="height: 300px;">
+                    <canvas id="myChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="text-center mt-5 text-muted small">
+                <p>Rapport généré par DigitagPro - Solutions NFC</p>
+                <p id="dateGeneration"></p>
+            </div>
+        </div>
+        
+        <div id="errorMsg" class="alert alert-danger text-center mt-5" style="display: none;"></div>
+    </div>
+
+    <script>
+        // 1. CONFIGURATION FIREBASE (La même que d'habitude)
+        const firebaseConfig = {
+            apiKey: "AIzaSyBjfZ6GHzg-IkP-i_1RMcWNqvyhSlrUMbk",
+            authDomain: "plaques-nfc-c6da0.firebaseapp.com",
+            projectId: "plaques-nfc-c6da0",
+            storageBucket: "plaques-nfc-c6da0.firebasestorage.app",
+            messagingSenderId: "790493007980",
+            appId: "1:790493007980:web:de515aa27e78e6a9a58849",
+            measurementId: "G-KWT3LZV7S5"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // 2. RÉCUPÉRATION ID
+        const urlParams = new URLSearchParams(window.location.search);
+        const plaqueId = urlParams.get('id');
+
+        // 3. AFFICHAGE DES DONNÉES
+        if (!plaqueId) {
+            showError("Aucun ID de plaque spécifié.");
+        } else {
+            loadStats();
+        }
+
+        function loadStats() {
+            db.collection("plaques").doc(plaqueId).get().then((doc) => {
+                if (doc.exists) {
+                    const data = doc.data();
+                    
+                    // Remplir les textes
+                    document.getElementById('displayId').innerText = "#" + doc.id;
+                    document.getElementById('displayScans').innerText = data.scans || 0;
+                    document.getElementById('displayUrl').innerText = data.url || "Non configuré";
+                    document.getElementById('displayUrl').setAttribute('title', data.url);
+                    document.getElementById('dateGeneration').innerText = "Généré le " + new Date().toLocaleDateString("fr-FR");
+
+                    // Afficher le contenu
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('statsContent').style.display = 'block';
+
+                    // Créer le graphique (Visuel sympa)
+                    createChart(data.scans || 0);
+
+                } else {
+                    showError("Cette plaque n'existe pas.");
+                }
+            }).catch((error) => {
+                showError("Erreur de connexion : " + error.message);
+            });
+        }
+
+        function showError(msg) {
+            document.getElementById('loading').style.display = 'none';
+            const errDiv = document.getElementById('errorMsg');
+            errDiv.style.display = 'block';
+            errDiv.innerText = msg;
+        }
+
+        // 4. GRAPHIQUE (Chart.js)
+        function createChart(totalScans) {
+            const ctx = document.getElementById('myChart').getContext('2d');
+            // Comme on n'a pas encore l'historique par date, on fait un graphique simple
+            // Pour montrer que le système marche.
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Total des Vues'],
+                    datasets: [{
+                        label: 'Nombre de scans',
+                        data: [totalScans],
+                        backgroundColor: ['#0d6efd'],
+                        borderRadius: 10,
+                        barThickness: 50
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
