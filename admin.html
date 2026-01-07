@@ -195,7 +195,8 @@
             const tbody = document.getElementById('tableBody');
             tbody.innerHTML = "<tr><td colspan='6' class='text-center'>Chargement...</td></tr>";
             
-            db.collection("plaques").orderBy("createdAt", "desc").limit(500).get().then((snapshot) => {
+            // MODIFICATION ICI : Tri par internalId (N° Stock) Ascendant
+            db.collection("plaques").orderBy("internalId", "asc").limit(500).get().then((snapshot) => {
                 tbody.innerHTML = "";
                 document.getElementById('totalCount').innerText = snapshot.size;
 
@@ -211,7 +212,6 @@
                     const secretParam = data.secret ? `&secret=${data.secret}` : "";
                     const statsLink = `stats.html?id=${publicId}${secretParam}`;
 
-                    // MODIFICATION ICI : On passe "this" dans la fonction saveOne
                     const row = `
                         <tr>
                             ${checkCell}
@@ -251,13 +251,10 @@
             }
         }
 
-        // --- SAUVEGARDE FIXÉE (Utilise le bouton passé en paramètre) ---
         function saveOne(btnElement, id, secret) {
-            // 1. On récupère la case
             const input = document.getElementById(`url-${id}`);
             let newUrl = input.value.trim();
 
-            // 2. Correction Auto https://
             if (newUrl && !newUrl.startsWith('http')) {
                 newUrl = 'https://' + newUrl;
                 input.value = newUrl;
@@ -265,17 +262,13 @@
 
             let updates = { url: newUrl };
 
-            // Si vieux compte sans secret
             if (!secret || secret === 'undefined' || secret === '') {
                 updates.secret = generateSecret();
             }
 
-            // 3. Enregistrement
             db.collection("plaques").doc(id).set(updates, { merge: true })
                 .then(() => {
-                    // 4. Animation sur le bouton (on utilise btnElement passé directement)
                     const originalText = "💾";
-
                     btnElement.innerText = "✅";
                     btnElement.classList.remove("btn-success");
                     btnElement.classList.add("btn-warning");
@@ -284,8 +277,7 @@
                         btnElement.innerText = originalText;
                         btnElement.classList.remove("btn-warning");
                         btnElement.classList.add("btn-success");
-
-                        // Reload si nécessaire
+                        
                         if (!secret || secret === 'undefined' || secret === '') {
                             loadPlaques();
                         }
