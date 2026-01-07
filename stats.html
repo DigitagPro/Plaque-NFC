@@ -21,7 +21,7 @@
             body { background: white; } 
             .header-bg { background: white; color: black; padding: 0; border-bottom: 2px solid #000; } 
             #accessDenied { display: none; }
-            .col-md-4, .col-md-6 { width: 50%; float: left; } /* Aide pour l'impression */
+            .col-md-4, .col-md-6, .col-md-5, .col-md-7 { width: 50%; float: left; } 
         }
         #accessDenied { display: none; height: 100vh; align-items: center; justify-content: center; flex-direction: column; }
     </style>
@@ -187,16 +187,24 @@
                 document.getElementById('avgScans').innerText = "?";
             }
 
-            // Top Device
+            // --- CORRECTION "TOP APPAREIL" (Prendre le MAX des 3) ---
             const ios = data.stats_device_ios || 0;
             const android = data.stats_device_android || 0;
-            document.getElementById('topDevice').innerText = (ios > android) ? "iPhone" : (android > ios ? "Android" : "PC/Autre");
+            const computer = (data.stats_device_computer || 0) + (data.stats_device_autre || 0);
+            
+            let topText = "Égalité";
+            const maxVal = Math.max(ios, android, computer);
 
+            if (maxVal === 0) topText = "--";
+            else if (maxVal === ios) topText = "iPhone";
+            else if (maxVal === android) topText = "Android";
+            else if (maxVal === computer) topText = "Ordi/PC";
+            
+            document.getElementById('topDevice').innerText = topText;
 
             // --- GRAPHIQUES ---
 
-            // 1. APPAREILS (Camembert)
-            const computer = (data.stats_device_computer || 0) + (data.stats_device_autre || 0);
+            // 1. APPAREILS
             new Chart(document.getElementById('deviceChart'), {
                 type: 'doughnut',
                 data: {
@@ -210,7 +218,7 @@
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
             });
 
-            // 2. JOURS (Barres)
+            // 2. JOURS
             const daysData = [data.stats_day_1||0, data.stats_day_2||0, data.stats_day_3||0, data.stats_day_4||0, data.stats_day_5||0, data.stats_day_6||0, data.stats_day_0||0];
             new Chart(document.getElementById('daysChart'), {
                 type: 'bar',
@@ -221,7 +229,7 @@
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
             });
 
-            // 3. HEURES (Doughnut)
+            // 3. HEURES
             const timeData = [data.stats_time_matin||0, data.stats_time_midi||0, data.stats_time_apresmidi||0, data.stats_time_soir||0];
             new Chart(document.getElementById('timeChart'), {
                 type: 'pie',
@@ -232,7 +240,7 @@
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
             });
 
-            // 4. LANGUES (Pie)
+            // 4. LANGUES
             const langLabels = [], langValues = [];
             Object.keys(data).forEach(key => { if(key.startsWith('stats_lang_')) { langLabels.push(key.replace('stats_lang_', '').toUpperCase()); langValues.push(data[key]); } });
             new Chart(document.getElementById('langChart'), {
@@ -244,7 +252,7 @@
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
             });
 
-            // 5. NAVIGATEURS (Barre horizontale)
+            // 5. NAVIGATEURS
             const browserData = [data.stats_browser_chrome||0, data.stats_browser_safari||0, data.stats_browser_firefox||0, (data.stats_browser_autre||0)];
             new Chart(document.getElementById('browserChart'), {
                 type: 'bar',
