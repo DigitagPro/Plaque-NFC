@@ -22,6 +22,7 @@
             .header-bg { background: white; color: black; padding: 0; border-bottom: 2px solid #000; } 
             #accessDenied { display: none; }
             .col-md-4, .col-md-6, .col-md-5, .col-md-7 { width: 50%; float: left; } 
+            .col-12 { width: 100%; float: left; }
         }
         #accessDenied { display: none; height: 100vh; align-items: center; justify-content: center; flex-direction: column; }
     </style>
@@ -67,6 +68,17 @@
                 </div>
 
                 <div class="row g-3 mb-4">
+                    <div class="col-12">
+                        <div class="stat-card">
+                            <h6>📈 Évolution Mensuelle (12 derniers mois)</h6>
+                            <div style="height: 300px;">
+                                <canvas id="historyChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-4">
                     <div class="col-md-5">
                         <div class="stat-card">
                             <h6>📱 Type d'Appareil</h6>
@@ -77,7 +89,7 @@
                     </div>
                     <div class="col-md-7">
                         <div class="stat-card">
-                            <h6>📅 Jours d'affluence</h6>
+                            <h6>📅 Jours d'affluence (Global)</h6>
                             <div style="height: 250px;">
                                 <canvas id="daysChart"></canvas>
                             </div>
@@ -176,7 +188,6 @@
                 document.getElementById('lastScanDisplay').innerText = date.toLocaleDateString() + " " + date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
             }
 
-            // Calcul Moyenne
             if(data.createdAt) {
                 const created = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
                 const now = new Date();
@@ -187,22 +198,66 @@
                 document.getElementById('avgScans').innerText = "?";
             }
 
-            // --- CORRECTION "TOP APPAREIL" (Prendre le MAX des 3) ---
+            // Top Device
             const ios = data.stats_device_ios || 0;
             const android = data.stats_device_android || 0;
             const computer = (data.stats_device_computer || 0) + (data.stats_device_autre || 0);
             
             let topText = "Égalité";
             const maxVal = Math.max(ios, android, computer);
-
             if (maxVal === 0) topText = "--";
             else if (maxVal === ios) topText = "iPhone";
             else if (maxVal === android) topText = "Android";
             else if (maxVal === computer) topText = "Ordi/PC";
-            
             document.getElementById('topDevice').innerText = topText;
 
+            // --- NOUVEAU : PRÉPARATION DONNÉES HISTORIQUE ---
+            // On cherche toutes les clés qui commencent par "history_" (ex: history_2023-10)
+            let historyLabels = [];
+            let historyData = [];
+            
+            // On récupère les clés, on trie (2023-01 avant 2023-02), on garde les 12 derniers
+            const historyKeys = Object.keys(data)
+                .filter(k => k.startsWith('history_'))
+                .sort()
+                .slice(-12); // Garde les 12 derniers mois seulement
+
+            historyKeys.forEach(key => {
+                // key = "history_2023-10" -> on veut afficher "10/2023"
+                const datePart = key.replace('history_', '');
+                const [year, month] = datePart.split('-');
+                historyLabels.push(`${month}/${year}`);
+                historyData.push(data[key]);
+            });
+
+            // S'il n'y a pas encore d'historique, on met 0
+            if (historyLabels.length === 0) {
+                historyLabels = ["Ce mois"];
+                historyData = [total]; // On met le total actuel temporairement
+            }
+
             // --- GRAPHIQUES ---
+
+            // 0. COURBE D'ÉVOLUTION (NOUVEAU)
+            new Chart(document.getElementById('historyChart'), {
+                type: 'line',
+                data: {
+                    labels: historyLabels,
+                    datasets: [{
+                        label: 'Nombre de scans',
+                        data: historyData,
+                        borderColor: '#0061f2',
+                        backgroundColor: 'rgba(0, 97, 242, 0.1)',
+                        borderWidth: 3,
+                        pointBackgroundColor: '#fff',
+                        pointBorderColor: '#0061f2',
+                        pointRadius: 5,
+                        fill: true,
+                        tension: 0.3 // Pour faire des courbes douces
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+            });
 
             // 1. APPAREILS
             new Chart(document.getElementById('deviceChart'), {
