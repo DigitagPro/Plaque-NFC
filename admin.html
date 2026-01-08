@@ -59,7 +59,8 @@
 
             <hr>
 
-            <h5 class="text-success fw-bold mt-2">2. 📤 Export Excel</h5>
+            <h5 class="text-success fw-bold mt-2">2. 📤 Export Excel (Anti-Doublon)</h5>
+            <p class="text-muted small">Télécharge la liste SANS doublons (même s'il y en a dans la base).</p>
             
             <div class="row g-3 align-items-end">
                 <div class="col-md-3">
@@ -80,7 +81,7 @@
             <div class="mt-4 pt-3 border-top d-flex justify-content-between align-items-center">
                 <span class="text-muted small">Zone de Maintenance</span>
                 <div>
-                     <button onclick="removeDuplicates()" class="btn btn-warning btn-sm me-2">🧹 Nettoyer Doublons</button>
+                     <button onclick="removeDuplicates()" class="btn btn-warning btn-sm me-2">🧹 Nettoyer la base de données</button>
                     
                     <span id="bulkActionsBar" class="d-none">
                         <span class="me-2"><strong><span id="selectedCount">0</span></strong> sélec.</span>
@@ -190,17 +191,17 @@
             }
             try {
                 await batch.commit();
-                status.innerHTML = `<span class="text-success">✅ ${qty} plaques créées (Stock N°${startStock} à N°${startStock+qty-1}) !</span>`;
+                status.innerHTML = `<span class="text-success">✅ ${qty} plaques créées !</span>`;
                 loadPlaques();
             } catch (error) { status.innerHTML = `<span class="text-danger">Erreur : ${error.message}</span>`; }
         }
 
-        // --- EXPORT SUR MESURE ---
+        // --- EXPORT INTELLIGENT (FILTRE LES DOUBLONS A LA VOLÉE) ---
         async function exportCustomCSV() {
             if (!isAdmin) return;
             const btn = event.target;
             const oldText = btn.innerText;
-            btn.innerText = "⏳ Recherche...";
+            btn.innerText = "⏳ Préparation...";
             btn.disabled = true;
 
             const startVal = document.getElementById('exportStart').value;
@@ -230,12 +231,21 @@
                     return;
                 }
 
+                // --- DÉDUPLICATION INTELLIGENTE ICI ---
                 let csvContent = "data:text/csv;charset=utf-8,NUMERO_PLAQUE,LIEN_USINE_QR\n";
+                let seenNumbers = new Set(); // Pour mémoriser les numéros déjà écrits
+
                 snapshot.forEach(doc => {
                     const data = doc.data();
-                    const numPlaque = data.internalId || "?"; 
-                    const lienUsine = BASE_URL + doc.id;      
-                    csvContent += `${numPlaque},${lienUsine}\n`;
+                    const numPlaque = data.internalId; 
+
+                    // Si on a déjà écrit ce numéro dans le CSV, on saute (on ignore les suivants)
+                    if (numPlaque && !seenNumbers.has(numPlaque)) {
+                        seenNumbers.add(numPlaque); // On note qu'on a traité ce numéro
+                        
+                        const lienUsine = BASE_URL + doc.id;      
+                        csvContent += `${numPlaque},${lienUsine}\n`;
+                    }
                 });
 
                 const encodedUri = encodeURI(csvContent);
@@ -247,7 +257,7 @@
                 link.click();
                 document.body.removeChild(link);
 
-                btn.innerText = `✅ ${snapshot.size} exportées`;
+                btn.innerText = `✅ Export terminé`;
                 setTimeout(() => { btn.innerText = oldText; btn.disabled = false; }, 2000);
 
             } catch (error) {
@@ -258,39 +268,63 @@
             }
         }
 
-        // --- FONCTION MAGIQUE : NETTOYAGE DES DOUBLONS ---
+        // --- NETTOYAGE PHYSIQUE DE LA BASE ---
         async function removeDuplicates() {
             if (!isAdmin) return;
-            if (!confirm("⚠️ Cette action va supprimer les plaques en double (même N° Stock). \n\nEs-tu sûr de vouloir nettoyer ?")) return;
+            const btn = event.target;
+            const oldText = btn.innerText;
+            
+            if (!confirm("⚠️ ATTENTION : Je vais scanner toute la base et supprimer les plaques en double (je garderai la première trouvée pour chaque numéro).\n\nContinuer ?")) return;
 
-            const snapshot = await db.collection("plaques").orderBy("internalId", "asc").get();
-            let seenIds = new Set(); // Pour mémoriser les numéros qu'on a déjà vus
-            let batch = db.batch();
-            let deletedCount = 0;
+            btn.innerText = "⏳ Nettoyage en cours...";
+            btn.disabled = true;
 
-            snapshot.forEach(doc => {
-                const data = doc.data();
-                const internal = data.internalId;
+            try {
+                // On récupère TOUT pour vérifier
+                const snapshot = await db.collection("plaques").orderBy("internalId", "asc").get();
+                let seenIds = new Set();
+                let batch = db.batch();
+                let deletedCount = 0;
+                let batchCount = 0; // Firebase limite les batchs à 500 ops
 
-                if (internal) { // Si la plaque a bien un numéro
-                    if (seenIds.has(internal)) {
-                        // C'est un doublon ! On le supprime (on garde le premier vu)
-                        batch.delete(doc.ref);
-                        deletedCount++;
-                    } else {
-                        // C'est la première fois qu'on voit ce numéro, on le garde
-                        seenIds.add(internal);
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const internal = data.internalId;
+
+                    if (internal) {
+                        if (seenIds.has(internal)) {
+                            // C'est un doublon ! On supprime
+                            batch.delete(doc.ref);
+                            deletedCount++;
+                            batchCount++;
+                        } else {
+                            // Premier de la liste, on garde
+                            seenIds.add(internal);
+                        }
                     }
-                }
-            });
 
-            if (deletedCount > 0) {
-                await batch.commit();
-                alert(`✅ Terminé ! ${deletedCount} doublons ont été supprimés.`);
-                loadPlaques(); // On recharge le tableau
-            } else {
-                alert("👍 Aucun doublon trouvé. Tout est propre.");
+                    // Si on atteint 400 suppressions, on exécute pour ne pas bloquer
+                    if (batchCount >= 400) {
+                        batch.commit();
+                        batch = db.batch(); // Nouveau batch
+                        batchCount = 0;
+                    }
+                });
+
+                if (deletedCount > 0) {
+                    await batch.commit(); // On finit le travail
+                    alert(`✅ Nettoyage terminé ! ${deletedCount} plaques en double ont été supprimées.`);
+                    loadPlaques();
+                } else {
+                    alert("👍 La base est propre, aucun doublon trouvé.");
+                }
+
+            } catch (e) {
+                alert("Erreur : " + e.message);
             }
+
+            btn.innerText = oldText;
+            btn.disabled = false;
         }
 
         function loadPlaques() {
