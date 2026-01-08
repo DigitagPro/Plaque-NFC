@@ -59,8 +59,7 @@
 
             <hr>
 
-            <h5 class="text-success fw-bold mt-2">2. 📤 Export Excel (Sur mesure)</h5>
-            <p class="text-muted small">Laisse vide pour tout télécharger, ou mets des numéros pour filtrer.</p>
+            <h5 class="text-success fw-bold mt-2">2. 📤 Export Excel</h5>
             
             <div class="row g-3 align-items-end">
                 <div class="col-md-3">
@@ -78,9 +77,16 @@
                 </div>
             </div>
 
-            <div id="bulkActionsBar" class="alert alert-danger mt-4 d-none align-items-center justify-content-between">
-                <span><strong><span id="selectedCount">0</span></strong> plaques sélectionnées.</span>
-                <button onclick="deleteSelected()" class="btn btn-danger btn-sm">🗑️ Tout Supprimer</button>
+            <div class="mt-4 pt-3 border-top d-flex justify-content-between align-items-center">
+                <span class="text-muted small">Zone de Maintenance</span>
+                <div>
+                     <button onclick="removeDuplicates()" class="btn btn-warning btn-sm me-2">🧹 Nettoyer Doublons</button>
+                    
+                    <span id="bulkActionsBar" class="d-none">
+                        <span class="me-2"><strong><span id="selectedCount">0</span></strong> sélec.</span>
+                        <button onclick="deleteSelected()" class="btn btn-danger btn-sm">🗑️ Supprimer la sélection</button>
+                    </span>
+                </div>
             </div>
         </div>
 
@@ -189,7 +195,7 @@
             } catch (error) { status.innerHTML = `<span class="text-danger">Erreur : ${error.message}</span>`; }
         }
 
-        // --- NOUVELLE FONCTION : EXPORT SUR MESURE (SELECTEUR) ---
+        // --- EXPORT SUR MESURE ---
         async function exportCustomCSV() {
             if (!isAdmin) return;
             const btn = event.target;
@@ -197,51 +203,41 @@
             btn.innerText = "⏳ Recherche...";
             btn.disabled = true;
 
-            // Récupération des valeurs du sélecteur
             const startVal = document.getElementById('exportStart').value;
             const endVal = document.getElementById('exportEnd').value;
 
             try {
                 let query = db.collection("plaques").orderBy("internalId", "asc");
-
-                // Logique du filtre
                 let filename = "STOCK_COMPLET";
                 
                 if (startVal && endVal) {
-                    // Si on a un début ET une fin (ex: 10 à 50)
                     const startNum = parseInt(startVal);
                     const endNum = parseInt(endVal);
                     query = query.startAt(startNum).endAt(endNum);
                     filename = `STOCK_DE_${startNum}_A_${endNum}`;
                 } else if (startVal) {
-                    // Si on a juste un début (ex: à partir de 100)
                     const startNum = parseInt(startVal);
                     query = query.startAt(startNum);
                     filename = `STOCK_DEPUIS_${startNum}`;
                 }
                 
-                // Récupération des données
                 const snapshot = await query.get();
 
                 if (snapshot.empty) {
-                    alert("Aucune plaque trouvée dans cette sélection !");
+                    alert("Aucune plaque trouvée !");
                     btn.innerText = oldText;
                     btn.disabled = false;
                     return;
                 }
 
-                // Création CSV (Uniquement 2 colonnes)
                 let csvContent = "data:text/csv;charset=utf-8,NUMERO_PLAQUE,LIEN_USINE_QR\n";
-
                 snapshot.forEach(doc => {
                     const data = doc.data();
                     const numPlaque = data.internalId || "?"; 
                     const lienUsine = BASE_URL + doc.id;      
-
                     csvContent += `${numPlaque},${lienUsine}\n`;
                 });
 
-                // Téléchargement
                 const encodedUri = encodeURI(csvContent);
                 const link = document.createElement("a");
                 link.setAttribute("href", encodedUri);
@@ -251,8 +247,7 @@
                 link.click();
                 document.body.removeChild(link);
 
-                // Fin
-                btn.innerText = `✅ ${snapshot.size} Plaques exportées`;
+                btn.innerText = `✅ ${snapshot.size} exportées`;
                 setTimeout(() => { btn.innerText = oldText; btn.disabled = false; }, 2000);
 
             } catch (error) {
@@ -260,6 +255,41 @@
                 alert("Erreur : " + error.message);
                 btn.innerText = oldText;
                 btn.disabled = false;
+            }
+        }
+
+        // --- FONCTION MAGIQUE : NETTOYAGE DES DOUBLONS ---
+        async function removeDuplicates() {
+            if (!isAdmin) return;
+            if (!confirm("⚠️ Cette action va supprimer les plaques en double (même N° Stock). \n\nEs-tu sûr de vouloir nettoyer ?")) return;
+
+            const snapshot = await db.collection("plaques").orderBy("internalId", "asc").get();
+            let seenIds = new Set(); // Pour mémoriser les numéros qu'on a déjà vus
+            let batch = db.batch();
+            let deletedCount = 0;
+
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                const internal = data.internalId;
+
+                if (internal) { // Si la plaque a bien un numéro
+                    if (seenIds.has(internal)) {
+                        // C'est un doublon ! On le supprime (on garde le premier vu)
+                        batch.delete(doc.ref);
+                        deletedCount++;
+                    } else {
+                        // C'est la première fois qu'on voit ce numéro, on le garde
+                        seenIds.add(internal);
+                    }
+                }
+            });
+
+            if (deletedCount > 0) {
+                await batch.commit();
+                alert(`✅ Terminé ! ${deletedCount} doublons ont été supprimés.`);
+                loadPlaques(); // On recharge le tableau
+            } else {
+                alert("👍 Aucun doublon trouvé. Tout est propre.");
             }
         }
 
@@ -359,7 +389,13 @@
 
         function deletePlaque(id) { if (!isAdmin) return; if(confirm("Supprimer ?")) db.collection("plaques").doc(id).delete().then(() => loadPlaques()); }
         function toggleSelectAll() { const m = document.getElementById('selectAllBox'); document.querySelectorAll('.plaque-checkbox').forEach(b => b.checked = m.checked); updateBulkState(); }
-        function updateBulkState() { const c = document.querySelectorAll('.plaque-checkbox:checked').length; const b = document.getElementById('bulkActionsBar'); document.getElementById('selectedCount').innerText = c; c>0?(b.classList.remove('d-none'),b.classList.add('d-flex')):(b.classList.add('d-none'),b.classList.remove('d-flex')); }
+        function updateBulkState() { 
+            const c = document.querySelectorAll('.plaque-checkbox:checked').length; 
+            const b = document.getElementById('bulkActionsBar'); 
+            document.getElementById('selectedCount').innerText = c; 
+            if(c>0) { b.classList.remove('d-none'); b.classList.add('d-flex'); }
+            else { b.classList.add('d-none'); b.classList.remove('d-flex'); }
+        }
         async function deleteSelected() { if (!isAdmin) return; const b = document.querySelectorAll('.plaque-checkbox:checked'); if(!b.length)return; if(confirm("Supprimer "+b.length+" ?")){ const p=[]; b.forEach(x=>p.push(db.collection("plaques").doc(x.value).delete())); await Promise.all(p); loadPlaques(); } }
     </script>
 </body>
