@@ -59,8 +59,8 @@
 
             <hr>
 
-            <h5 class="text-success fw-bold mt-2">2. 📤 Export Excel (Anti-Doublon)</h5>
-            <p class="text-muted small">Télécharge la liste SANS doublons (même s'il y en a dans la base).</p>
+            <h5 class="text-success fw-bold mt-2">2. 📤 Export Excel (Propre)</h5>
+            <p class="text-muted small">Le fichier généré supprimera automatiquement les doublons s'il y en a.</p>
             
             <div class="row g-3 align-items-end">
                 <div class="col-md-3">
@@ -78,16 +78,9 @@
                 </div>
             </div>
 
-            <div class="mt-4 pt-3 border-top d-flex justify-content-between align-items-center">
-                <span class="text-muted small">Zone de Maintenance</span>
-                <div>
-                     <button onclick="removeDuplicates()" class="btn btn-warning btn-sm me-2">🧹 Nettoyer la base de données</button>
-                    
-                    <span id="bulkActionsBar" class="d-none">
-                        <span class="me-2"><strong><span id="selectedCount">0</span></strong> sélec.</span>
-                        <button onclick="deleteSelected()" class="btn btn-danger btn-sm">🗑️ Supprimer la sélection</button>
-                    </span>
-                </div>
+            <div id="bulkActionsBar" class="alert alert-danger mt-4 d-none align-items-center justify-content-between">
+                <span><strong><span id="selectedCount">0</span></strong> plaques sélectionnées.</span>
+                <button onclick="deleteSelected()" class="btn btn-danger btn-sm">🗑️ Supprimer la sélection</button>
             </div>
         </div>
 
@@ -239,9 +232,9 @@
                     const data = doc.data();
                     const numPlaque = data.internalId; 
 
-                    // Si on a déjà écrit ce numéro dans le CSV, on saute (on ignore les suivants)
+                    // Si on a déjà écrit ce numéro dans le CSV, on saute
                     if (numPlaque && !seenNumbers.has(numPlaque)) {
-                        seenNumbers.add(numPlaque); // On note qu'on a traité ce numéro
+                        seenNumbers.add(numPlaque); 
                         
                         const lienUsine = BASE_URL + doc.id;      
                         csvContent += `${numPlaque},${lienUsine}\n`;
@@ -266,65 +259,6 @@
                 btn.innerText = oldText;
                 btn.disabled = false;
             }
-        }
-
-        // --- NETTOYAGE PHYSIQUE DE LA BASE ---
-        async function removeDuplicates() {
-            if (!isAdmin) return;
-            const btn = event.target;
-            const oldText = btn.innerText;
-            
-            if (!confirm("⚠️ ATTENTION : Je vais scanner toute la base et supprimer les plaques en double (je garderai la première trouvée pour chaque numéro).\n\nContinuer ?")) return;
-
-            btn.innerText = "⏳ Nettoyage en cours...";
-            btn.disabled = true;
-
-            try {
-                // On récupère TOUT pour vérifier
-                const snapshot = await db.collection("plaques").orderBy("internalId", "asc").get();
-                let seenIds = new Set();
-                let batch = db.batch();
-                let deletedCount = 0;
-                let batchCount = 0; // Firebase limite les batchs à 500 ops
-
-                snapshot.forEach(doc => {
-                    const data = doc.data();
-                    const internal = data.internalId;
-
-                    if (internal) {
-                        if (seenIds.has(internal)) {
-                            // C'est un doublon ! On supprime
-                            batch.delete(doc.ref);
-                            deletedCount++;
-                            batchCount++;
-                        } else {
-                            // Premier de la liste, on garde
-                            seenIds.add(internal);
-                        }
-                    }
-
-                    // Si on atteint 400 suppressions, on exécute pour ne pas bloquer
-                    if (batchCount >= 400) {
-                        batch.commit();
-                        batch = db.batch(); // Nouveau batch
-                        batchCount = 0;
-                    }
-                });
-
-                if (deletedCount > 0) {
-                    await batch.commit(); // On finit le travail
-                    alert(`✅ Nettoyage terminé ! ${deletedCount} plaques en double ont été supprimées.`);
-                    loadPlaques();
-                } else {
-                    alert("👍 La base est propre, aucun doublon trouvé.");
-                }
-
-            } catch (e) {
-                alert("Erreur : " + e.message);
-            }
-
-            btn.innerText = oldText;
-            btn.disabled = false;
         }
 
         function loadPlaques() {
